@@ -10,6 +10,14 @@ URL: https://arxiv.org/abs/2012.06691
 
 It was published in the conference proceedings of the conference for Mathematical and Scientific Machine Learning (MSML21).
 
+## Running the code
+
+The executable code is located in the directory `tensorflow`.
+To run, execute the script `run_dnn.py`.
+Different options for the inference can be set by modifying the file `config/params.yaml`.
+
+The data for the training and evaluating the trained DNN models is located in the directory `data/float32`.
+
 ## Imported Python packages
 
 It is required to install the packages:
