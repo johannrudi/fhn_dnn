@@ -8,7 +8,7 @@ This code demonstrates some of the numerical experiments of the paper:
 by Johann Rudi, Julie Bessac, Amanda Lenzi, 2021.
 URL: https://arxiv.org/abs/2012.06691
 
-It was published in the conference proceedings of the conference for Mathematical and Scientific Machine Learning (MSML21).
+It was published in the proceedings of the conference for Mathematical and Scientific Machine Learning (MSML21).
 
 ## Running the code
 
