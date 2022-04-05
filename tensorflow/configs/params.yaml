@@ -1,0 +1,41 @@
+description: "FHN-ODE inference parameters"
+
+data:
+    data_dir:  '../data/float32' # relative path to data directory
+    data_type: 'TIME_NOISE'      # 'TIME', 'TIME_NOISE', 'RATE', 'RATE_DURATION'
+    Ntrain:    1024
+    Nvalidate: 0
+    Ntest:     2048
+    train_shuffle_buffer_size: 1000
+    train_batch_size: 32
+    eval_batch_size:  32
+    random_seed: 123
+
+model:
+    model_type: 'convNN'  # 'denseNN', 'convNN'
+    conv_layer_sizes:
+        - 8
+        - 16
+        - 32
+    dense_layer_sizes:
+        - 32
+        - 32
+    activation_fn: 'swish'  # 'relu', 'swish'
+    dropout: #0.2
+
+optimizer:
+    learning_rate: 0.002
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1.0e-8
+
+training:
+    epochs: 200
+
+runconfig:
+    mode: 'TRAIN'
+    model_load: #'runs/model_dir'
+    model_dir:  'runs/model_dir'
+    save_checkpoints_steps: 50
+    debug: True
+    verbose: True
