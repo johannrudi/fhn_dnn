@@ -4,9 +4,9 @@ The goal is to estimate parameters in ordinary differential equations (ODEs) fro
 
 This code demonstrates some of the numerical experiments of the paper:
 
-**Parameter Estimation with Dense and Convolutional Neural Networks Applied to the FitzHugh-Nagumo ODE**  
-by Johann Rudi, Julie Bessac, Amanda Lenzi, 2021.  
-URL: https://arxiv.org/abs/2012.06691
+> **Parameter Estimation with Dense and Convolutional Neural Networks Applied to the FitzHugh-Nagumo ODE**  
+> by Johann Rudi, Julie Bessac, Amanda Lenzi, 2021.  
+> URL: https://arxiv.org/abs/2012.06691
 
 It was published in the proceedings of the conference for Mathematical and Scientific Machine Learning (MSML21).
 
