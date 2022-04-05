@@ -1,5 +1,7 @@
 # Inference using Deep Neural Networks applied to FitzHugh-Nagumo ODE
 
+The goal is to estimate parameters in ordinary differential equations (ODEs) from data that represents the output of an ODE.  We perform such an inference using a trained Deep Neural Network (DNN).  The particular ODE targeted here is the FitzHugh-Nagumo, which models voltage spikes of biological neurons.
+
 This code demonstrates some of the numerical experiments of the paper:
 
 *Parameter Estimation with Dense and Convolutional Neural Networks Applied to the FitzHugh-Nagumo ODE*
