@@ -8,7 +8,7 @@ URL: https://arxiv.org/abs/2012.06691
 
 It was published in the conference proceedings of the conference for Mathematical and Scientific Machine Learning (MSML21).
 
-## Imported packages
+## Imported Python packages
 
 It is required to install the packages:
 
