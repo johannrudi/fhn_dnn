@@ -1,4 +1,4 @@
-description: "FHN-ODE inference parameters"
+description: "Options for FHN-ODE inference"
 
 data:
     data_dir:  '../data/float32' # relative path to data directory
