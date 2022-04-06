@@ -16,6 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (load_parameters, save_parameters, update_parameters_from_args)
 
 def run(args, params):
+    _prefix          = '[run_dnn]'
     mode_name        = params['runconfig']['mode'].casefold()
     model_type       = params['model']['model_type'].casefold()
     enable_verbose   = params['runconfig']['verbose']
@@ -37,16 +38,16 @@ def run(args, params):
         tf.random.set_seed(params['data']['random_seed'])
 
     # print environment
-    print('[run]', 'Environment')
-    print('- Directory:         ', self_dir)
-    print('- TensorFlow version:', tf.version.VERSION)
-    print('- Mode name:         ', mode_name)
-    print('- Mode key:          ', mode)
-    print('- Seed:              ', params['data']['random_seed'])
+    print(_prefix, 'Environment')
+    print(_prefix, '- Directory:         ', self_dir)
+    print(_prefix, '- TensorFlow version:', tf.version.VERSION)
+    print(_prefix, '- Mode name:         ', mode_name)
+    print(_prefix, '- Mode key:          ', mode)
+    print(_prefix, '- Seed:              ', params['data']['random_seed'])
 
     # print parameters
     if enable_verbose:
-        print('[run]', 'Parameters:')
+        print(_prefix, 'Parameters')
         pp = pprint.PrettyPrinter(indent=4)
         pp.pprint(params)
 
@@ -68,14 +69,14 @@ def run(args, params):
 
     # print info about data
     if enable_verbose:
-        print('[run]', 'features_train shape:', features_train.shape)
-        print('[run]', 'features_test shape: ', features_test.shape)
-        print('[run]', 'labels_train shape:  ', labels_train.shape)
-        print('[run]', 'labels_test shape:   ', labels_test.shape)
-        print('[run]', 'num_features:        ', params['model']['num_features'])
-        print('[run]', 'num_labels:          ', params['model']['num_labels'])
-        print('[run]', 'features scale:      ', features_scale)
-        print('[run]', 'labels scale:        ', labels_scale)
+        print(_prefix, 'features_train shape:', features_train.shape)
+        print(_prefix, 'features_test shape: ', features_test.shape)
+        print(_prefix, 'labels_train shape:  ', labels_train.shape)
+        print(_prefix, 'labels_test shape:   ', labels_test.shape)
+        print(_prefix, 'num_features:        ', params['model']['num_features'])
+        print(_prefix, 'num_labels:          ', params['model']['num_labels'])
+        print(_prefix, 'features scale:      ', features_scale)
+        print(_prefix, 'labels scale:        ', labels_scale)
 
     # create dataset
     dataset = create_dataset(params, mode,
@@ -90,7 +91,7 @@ def run(args, params):
     else:
         raise NotImplementedError()
     if enable_verbose:
-        print('[run]', 'Model summary:')
+        print(_prefix, 'Model summary')
         model.summary()
 
     # load model weights
@@ -103,7 +104,7 @@ def run(args, params):
     #
 
     if ModeKeys.TRAIN == mode:
-        print('[run]', 'Train')
+        print(_prefix, 'Train')
 
         # compile model
         optimizer = tf.keras.optimizers.Adam(learning_rate=params['optimizer']['learning_rate'],
@@ -135,7 +136,7 @@ def run(args, params):
     # Evaluation
     #
 
-    print('[run]', 'Evaluate')
+    print(_prefix, 'Evaluate')
 
     # compute predictions
     time_eval = timeit.default_timer()
@@ -157,28 +158,28 @@ def run(args, params):
     r2_test_all  = metrics.r2_score(labels_test, labels_test_predict)
 
     # print metrics
-    print('Evaluate')
-    print('- R2 score (train):', r2_train, r2_train_all)
-    print('- R2 score (eval): ', r2_test,  r2_test_all)
+    print(_prefix, 'Evaluate')
+    print(_prefix, '- R2 score (train):', r2_train, r2_train_all)
+    print(_prefix, '- R2 score (eval): ', r2_test,  r2_test_all)
 
     # print runtimes
-    print('Runtime [sec]')
-    print('- train:', time_train)
-    print('- eval: ', time_eval)
-    print('Runtime statistics')
+    print(_prefix, 'Runtime [sec]')
+    print(_prefix, '- train:', time_train)
+    print(_prefix, '- eval: ', time_eval)
+    print(_prefix, 'Runtime statistics')
     if 0 < time_train:
         n_epoch   = params['training']['epochs']
         n_steps   = params['training']['epochs'] * (params['data']['Ntrain']//params['data']['train_batch_size'])
         n_samples = params['data']['train_batch_size']
-        print('- train - #epochs:         ', n_epoch)
-        print('- train - #steps:          ', n_steps)
-        print('- train - #samples (total):', n_steps*n_samples)
-        print('- train - avg. steps/sec:  ', n_steps/time_train)
-        print('- train - avg. samples/sec:', n_steps*n_samples/time_train)
+        print(_prefix, '- train - #epochs:         ', n_epoch)
+        print(_prefix, '- train - #steps:          ', n_steps)
+        print(_prefix, '- train - #samples (total):', n_steps*n_samples)
+        print(_prefix, '- train - avg. steps/sec:  ', n_steps/time_train)
+        print(_prefix, '- train - avg. samples/sec:', n_steps*n_samples/time_train)
     if 0 < time_eval:
         n_samples = (params['data']['Ntest']//params['data']['eval_batch_size']) * params['data']['eval_batch_size']
-        print('- eval  - #samples:        ', n_samples)
-        print('- eval  - avg. samples/sec:', n_samples/time_eval)
+        print(_prefix, '- eval  - #samples:        ', n_samples)
+        print(_prefix, '- eval  - avg. samples/sec:', n_samples/time_eval)
 
     # plot true training values vs. predictions
     n_plot_cols = labels_train.shape[1]

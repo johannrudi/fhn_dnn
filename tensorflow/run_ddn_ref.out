@@ -1,0 +1,517 @@
+[run_dnn] Environment
+[run_dnn] - Directory:          <some path>/fhn_dnn/tensorflow
+[run_dnn] - TensorFlow version: 2.4.1
+[run_dnn] - Mode name:          train
+[run_dnn] - Mode key:           train
+[run_dnn] - Seed:               123
+[run_dnn] Parameters
+{   'data': {   'Ntest': 2048,
+                'Ntrain': 1024,
+                'Nvalidate': 0,
+                'data_dir': '../data/float32',
+                'data_type': 'TIME_NOISE',
+                'eval_batch_size': 32,
+                'random_seed': 123,
+                'train_batch_size': 32,
+                'train_shuffle_buffer_size': 1000},
+    'description': 'Options for FHN-ODE inference',
+    'model': {   'activation_fn': 'swish',
+                 'conv_layer_sizes': [8, 16, 32],
+                 'dense_layer_sizes': [32, 32],
+                 'dropout': None,
+                 'model_type': 'convNN'},
+    'optimizer': {   'beta1': 0.9,
+                     'beta2': 0.999,
+                     'epsilon': 1e-08,
+                     'learning_rate': 0.002},
+    'runconfig': {   'debug': True,
+                     'mode': 'train',
+                     'model_dir': 'runs/model_dir',
+                     'model_load': None,
+                     'params': 'configs/params.yaml',
+                     'save_checkpoints_steps': 50,
+                     'verbose': True},
+    'training': {'epochs': 200}}
+[load_data] features shape: (10000, 1000) - dtype: float32
+[load_data] labels shape:   (10000, 2) - dtype: float32
+[load_data] features_noise shape: (10000, 1000) - dtype: float32
+[load_data] Ns: 10000
+[load_data] Ntrain:    1024
+[load_data] Nvalidate: 0
+[load_data] Ntest:     2048
+[run_dnn] features_train shape: (1024, 1000, 1)
+[run_dnn] features_test shape:  (2048, 1000, 1)
+[run_dnn] labels_train shape:   (1024, 2)
+[run_dnn] labels_test shape:    (2048, 2)
+[run_dnn] num_features:         (1000, 1)
+[run_dnn] num_labels:           2
+[run_dnn] features scale:       {'shift': 0.0, 'mult': 1.0}
+[run_dnn] labels scale:         {'shift': array([[-0.19046102, -0.39422134]], dtype=float32), 'mult': array([[1.1864839, 1.5862216]], dtype=float32)}
+[create_dataset] Create new dataset from tensor slices
+[create_dataset] Shuffle the dataset, buffer size 1000 random seed 123
+[create_dataset] Batch the dataset, batch size 32
+[run_dnn] Model summary
+Model: "convNN"
+_________________________________________________________________
+Layer (type)                 Output Shape              Param #   
+=================================================================
+input_1 (InputLayer)         [(None, 1000, 1)]         0         
+_________________________________________________________________
+conv1d (Conv1D)              (None, 499, 8)            32        
+_________________________________________________________________
+activation (Activation)      (None, 499, 8)            0         
+_________________________________________________________________
+average_pooling1d (AveragePo (None, 249, 8)            0         
+_________________________________________________________________
+conv1d_1 (Conv1D)            (None, 124, 16)           400       
+_________________________________________________________________
+activation_1 (Activation)    (None, 124, 16)           0         
+_________________________________________________________________
+average_pooling1d_1 (Average (None, 62, 16)            0         
+_________________________________________________________________
+conv1d_2 (Conv1D)            (None, 30, 32)            1568      
+_________________________________________________________________
+activation_2 (Activation)    (None, 30, 32)            0         
+_________________________________________________________________
+flatten (Flatten)            (None, 960)               0         
+_________________________________________________________________
+dense (Dense)                (None, 32)                30752     
+_________________________________________________________________
+activation_3 (Activation)    (None, 32)                0         
+_________________________________________________________________
+dense_1 (Dense)              (None, 32)                1056      
+_________________________________________________________________
+activation_4 (Activation)    (None, 32)                0         
+_________________________________________________________________
+dense_2 (Dense)              (None, 2)                 66        
+_________________________________________________________________
+activation_5 (Activation)    (None, 2)                 0         
+=================================================================
+Total params: 33,874
+Trainable params: 33,874
+Non-trainable params: 0
+_________________________________________________________________
+[run_dnn] Train
+Epoch 1/200
+32/32 - 1s - loss: 0.0277
+Epoch 2/200
+32/32 - 0s - loss: 0.0149
+Epoch 3/200
+32/32 - 0s - loss: 0.0108
+Epoch 4/200
+32/32 - 0s - loss: 0.0073
+Epoch 5/200
+32/32 - 0s - loss: 0.0057
+Epoch 6/200
+32/32 - 0s - loss: 0.0052
+Epoch 7/200
+32/32 - 0s - loss: 0.0047
+Epoch 8/200
+32/32 - 0s - loss: 0.0042
+Epoch 9/200
+32/32 - 0s - loss: 0.0041
+Epoch 10/200
+32/32 - 0s - loss: 0.0036
+Epoch 11/200
+32/32 - 0s - loss: 0.0034
+Epoch 12/200
+32/32 - 0s - loss: 0.0033
+Epoch 13/200
+32/32 - 0s - loss: 0.0034
+Epoch 14/200
+32/32 - 0s - loss: 0.0030
+Epoch 15/200
+32/32 - 0s - loss: 0.0030
+Epoch 16/200
+32/32 - 0s - loss: 0.0030
+Epoch 17/200
+32/32 - 0s - loss: 0.0024
+Epoch 18/200
+32/32 - 0s - loss: 0.0023
+Epoch 19/200
+32/32 - 0s - loss: 0.0023
+Epoch 20/200
+32/32 - 0s - loss: 0.0022
+Epoch 21/200
+32/32 - 0s - loss: 0.0020
+Epoch 22/200
+32/32 - 0s - loss: 0.0019
+Epoch 23/200
+32/32 - 0s - loss: 0.0018
+Epoch 24/200
+32/32 - 0s - loss: 0.0018
+Epoch 25/200
+32/32 - 0s - loss: 0.0016
+Epoch 26/200
+32/32 - 0s - loss: 0.0016
+Epoch 27/200
+32/32 - 0s - loss: 0.0015
+Epoch 28/200
+32/32 - 0s - loss: 0.0014
+Epoch 29/200
+32/32 - 0s - loss: 0.0016
+Epoch 30/200
+32/32 - 0s - loss: 0.0015
+Epoch 31/200
+32/32 - 0s - loss: 0.0015
+Epoch 32/200
+32/32 - 0s - loss: 0.0012
+Epoch 33/200
+32/32 - 0s - loss: 0.0012
+Epoch 34/200
+32/32 - 0s - loss: 0.0013
+Epoch 35/200
+32/32 - 0s - loss: 0.0013
+Epoch 36/200
+32/32 - 0s - loss: 0.0014
+Epoch 37/200
+32/32 - 0s - loss: 0.0012
+Epoch 38/200
+32/32 - 0s - loss: 0.0012
+Epoch 39/200
+32/32 - 0s - loss: 0.0012
+Epoch 40/200
+32/32 - 0s - loss: 9.5885e-04
+Epoch 41/200
+32/32 - 0s - loss: 9.7596e-04
+Epoch 42/200
+32/32 - 0s - loss: 0.0011
+Epoch 43/200
+32/32 - 0s - loss: 8.6582e-04
+Epoch 44/200
+32/32 - 0s - loss: 8.2266e-04
+Epoch 45/200
+32/32 - 0s - loss: 9.3311e-04
+Epoch 46/200
+32/32 - 0s - loss: 7.9257e-04
+Epoch 47/200
+32/32 - 0s - loss: 7.6968e-04
+Epoch 48/200
+32/32 - 0s - loss: 9.3912e-04
+Epoch 49/200
+32/32 - 0s - loss: 8.8318e-04
+Epoch 50/200
+
+Epoch 00050: saving model to <some path>/fhn_dnn/tensorflow/runs/model_dir/model.ckpt-0050
+32/32 - 0s - loss: 6.9944e-04
+Epoch 51/200
+32/32 - 0s - loss: 6.6165e-04
+Epoch 52/200
+32/32 - 0s - loss: 7.6573e-04
+Epoch 53/200
+32/32 - 0s - loss: 7.5668e-04
+Epoch 54/200
+32/32 - 0s - loss: 7.3542e-04
+Epoch 55/200
+32/32 - 0s - loss: 6.5760e-04
+Epoch 56/200
+32/32 - 0s - loss: 6.5668e-04
+Epoch 57/200
+32/32 - 0s - loss: 6.2242e-04
+Epoch 58/200
+32/32 - 0s - loss: 5.2944e-04
+Epoch 59/200
+32/32 - 0s - loss: 4.9652e-04
+Epoch 60/200
+32/32 - 0s - loss: 4.4336e-04
+Epoch 61/200
+32/32 - 0s - loss: 4.7631e-04
+Epoch 62/200
+32/32 - 0s - loss: 4.3733e-04
+Epoch 63/200
+32/32 - 0s - loss: 7.3584e-04
+Epoch 64/200
+32/32 - 0s - loss: 4.4932e-04
+Epoch 65/200
+32/32 - 0s - loss: 4.8609e-04
+Epoch 66/200
+32/32 - 0s - loss: 4.1183e-04
+Epoch 67/200
+32/32 - 0s - loss: 5.0761e-04
+Epoch 68/200
+32/32 - 0s - loss: 4.2189e-04
+Epoch 69/200
+32/32 - 0s - loss: 3.8982e-04
+Epoch 70/200
+32/32 - 0s - loss: 3.3987e-04
+Epoch 71/200
+32/32 - 0s - loss: 3.6121e-04
+Epoch 72/200
+32/32 - 0s - loss: 3.6243e-04
+Epoch 73/200
+32/32 - 0s - loss: 3.9268e-04
+Epoch 74/200
+32/32 - 0s - loss: 3.4908e-04
+Epoch 75/200
+32/32 - 0s - loss: 3.4251e-04
+Epoch 76/200
+32/32 - 0s - loss: 3.4219e-04
+Epoch 77/200
+32/32 - 0s - loss: 3.8815e-04
+Epoch 78/200
+32/32 - 0s - loss: 2.8466e-04
+Epoch 79/200
+32/32 - 0s - loss: 2.9080e-04
+Epoch 80/200
+32/32 - 0s - loss: 2.6767e-04
+Epoch 81/200
+32/32 - 0s - loss: 2.2927e-04
+Epoch 82/200
+32/32 - 0s - loss: 2.2854e-04
+Epoch 83/200
+32/32 - 0s - loss: 2.2162e-04
+Epoch 84/200
+32/32 - 0s - loss: 1.7616e-04
+Epoch 85/200
+32/32 - 0s - loss: 1.7729e-04
+Epoch 86/200
+32/32 - 0s - loss: 2.3469e-04
+Epoch 87/200
+32/32 - 0s - loss: 2.2016e-04
+Epoch 88/200
+32/32 - 0s - loss: 1.6419e-04
+Epoch 89/200
+32/32 - 0s - loss: 1.4123e-04
+Epoch 90/200
+32/32 - 0s - loss: 1.5501e-04
+Epoch 91/200
+32/32 - 0s - loss: 1.5428e-04
+Epoch 92/200
+32/32 - 0s - loss: 1.5784e-04
+Epoch 93/200
+32/32 - 0s - loss: 1.6836e-04
+Epoch 94/200
+32/32 - 0s - loss: 1.5479e-04
+Epoch 95/200
+32/32 - 0s - loss: 1.6394e-04
+Epoch 96/200
+32/32 - 0s - loss: 1.8369e-04
+Epoch 97/200
+32/32 - 0s - loss: 1.6856e-04
+Epoch 98/200
+32/32 - 0s - loss: 1.7415e-04
+Epoch 99/200
+32/32 - 0s - loss: 1.7638e-04
+Epoch 100/200
+
+Epoch 00100: saving model to <some path>/fhn_dnn/tensorflow/runs/model_dir/model.ckpt-0100
+32/32 - 0s - loss: 1.4959e-04
+Epoch 101/200
+32/32 - 0s - loss: 1.3249e-04
+Epoch 102/200
+32/32 - 0s - loss: 1.3319e-04
+Epoch 103/200
+32/32 - 0s - loss: 1.1079e-04
+Epoch 104/200
+32/32 - 0s - loss: 1.0791e-04
+Epoch 105/200
+32/32 - 0s - loss: 1.0901e-04
+Epoch 106/200
+32/32 - 0s - loss: 1.0453e-04
+Epoch 107/200
+32/32 - 0s - loss: 1.0422e-04
+Epoch 108/200
+32/32 - 0s - loss: 1.0849e-04
+Epoch 109/200
+32/32 - 0s - loss: 1.5167e-04
+Epoch 110/200
+32/32 - 0s - loss: 2.0153e-04
+Epoch 111/200
+32/32 - 0s - loss: 1.6014e-04
+Epoch 112/200
+32/32 - 0s - loss: 1.1786e-04
+Epoch 113/200
+32/32 - 0s - loss: 1.3532e-04
+Epoch 114/200
+32/32 - 0s - loss: 1.2006e-04
+Epoch 115/200
+32/32 - 0s - loss: 1.1509e-04
+Epoch 116/200
+32/32 - 0s - loss: 1.3911e-04
+Epoch 117/200
+32/32 - 0s - loss: 2.1951e-04
+Epoch 118/200
+32/32 - 0s - loss: 1.5565e-04
+Epoch 119/200
+32/32 - 0s - loss: 3.6953e-04
+Epoch 120/200
+32/32 - 0s - loss: 4.0628e-04
+Epoch 121/200
+32/32 - 0s - loss: 3.2100e-04
+Epoch 122/200
+32/32 - 0s - loss: 2.0025e-04
+Epoch 123/200
+32/32 - 0s - loss: 1.6918e-04
+Epoch 124/200
+32/32 - 0s - loss: 1.7638e-04
+Epoch 125/200
+32/32 - 0s - loss: 1.2606e-04
+Epoch 126/200
+32/32 - 0s - loss: 1.2867e-04
+Epoch 127/200
+32/32 - 0s - loss: 9.3405e-05
+Epoch 128/200
+32/32 - 0s - loss: 8.5903e-05
+Epoch 129/200
+32/32 - 0s - loss: 9.3843e-05
+Epoch 130/200
+32/32 - 0s - loss: 9.0610e-05
+Epoch 131/200
+32/32 - 0s - loss: 1.5358e-04
+Epoch 132/200
+32/32 - 0s - loss: 1.3525e-04
+Epoch 133/200
+32/32 - 0s - loss: 1.0906e-04
+Epoch 134/200
+32/32 - 0s - loss: 9.1701e-05
+Epoch 135/200
+32/32 - 0s - loss: 9.2780e-05
+Epoch 136/200
+32/32 - 0s - loss: 8.0781e-05
+Epoch 137/200
+32/32 - 0s - loss: 1.1868e-04
+Epoch 138/200
+32/32 - 0s - loss: 9.8493e-05
+Epoch 139/200
+32/32 - 0s - loss: 8.4450e-05
+Epoch 140/200
+32/32 - 0s - loss: 6.7622e-05
+Epoch 141/200
+32/32 - 0s - loss: 1.0634e-04
+Epoch 142/200
+32/32 - 0s - loss: 1.3457e-04
+Epoch 143/200
+32/32 - 0s - loss: 9.8180e-05
+Epoch 144/200
+32/32 - 0s - loss: 1.0021e-04
+Epoch 145/200
+32/32 - 0s - loss: 8.6021e-05
+Epoch 146/200
+32/32 - 0s - loss: 1.0876e-04
+Epoch 147/200
+32/32 - 0s - loss: 1.4176e-04
+Epoch 148/200
+32/32 - 0s - loss: 8.9934e-05
+Epoch 149/200
+32/32 - 0s - loss: 1.5271e-04
+Epoch 150/200
+
+Epoch 00150: saving model to <some path>/fhn_dnn/tensorflow/runs/model_dir/model.ckpt-0150
+32/32 - 0s - loss: 1.6604e-04
+Epoch 151/200
+32/32 - 0s - loss: 1.6883e-04
+Epoch 152/200
+32/32 - 0s - loss: 1.9139e-04
+Epoch 153/200
+32/32 - 0s - loss: 1.7043e-04
+Epoch 154/200
+32/32 - 0s - loss: 1.4107e-04
+Epoch 155/200
+32/32 - 0s - loss: 1.5434e-04
+Epoch 156/200
+32/32 - 0s - loss: 1.3586e-04
+Epoch 157/200
+32/32 - 0s - loss: 1.8527e-04
+Epoch 158/200
+32/32 - 0s - loss: 1.6758e-04
+Epoch 159/200
+32/32 - 0s - loss: 9.0671e-05
+Epoch 160/200
+32/32 - 0s - loss: 1.1163e-04
+Epoch 161/200
+32/32 - 0s - loss: 9.4384e-05
+Epoch 162/200
+32/32 - 0s - loss: 9.2651e-05
+Epoch 163/200
+32/32 - 0s - loss: 9.3210e-05
+Epoch 164/200
+32/32 - 0s - loss: 1.1332e-04
+Epoch 165/200
+32/32 - 0s - loss: 1.3779e-04
+Epoch 166/200
+32/32 - 0s - loss: 1.0265e-04
+Epoch 167/200
+32/32 - 0s - loss: 9.2617e-05
+Epoch 168/200
+32/32 - 0s - loss: 7.2691e-05
+Epoch 169/200
+32/32 - 0s - loss: 8.9042e-05
+Epoch 170/200
+32/32 - 0s - loss: 1.2194e-04
+Epoch 171/200
+32/32 - 0s - loss: 1.2432e-04
+Epoch 172/200
+32/32 - 0s - loss: 9.7218e-05
+Epoch 173/200
+32/32 - 0s - loss: 2.0565e-04
+Epoch 174/200
+32/32 - 0s - loss: 3.4294e-04
+Epoch 175/200
+32/32 - 0s - loss: 2.1119e-04
+Epoch 176/200
+32/32 - 0s - loss: 2.4285e-04
+Epoch 177/200
+32/32 - 0s - loss: 3.5924e-04
+Epoch 178/200
+32/32 - 0s - loss: 2.2117e-04
+Epoch 179/200
+32/32 - 0s - loss: 1.3058e-04
+Epoch 180/200
+32/32 - 0s - loss: 1.0016e-04
+Epoch 181/200
+32/32 - 0s - loss: 6.5487e-05
+Epoch 182/200
+32/32 - 0s - loss: 6.9593e-05
+Epoch 183/200
+32/32 - 0s - loss: 6.3657e-05
+Epoch 184/200
+32/32 - 0s - loss: 5.4543e-05
+Epoch 185/200
+32/32 - 0s - loss: 4.5706e-05
+Epoch 186/200
+32/32 - 0s - loss: 5.0041e-05
+Epoch 187/200
+32/32 - 0s - loss: 4.4435e-05
+Epoch 188/200
+32/32 - 0s - loss: 3.7062e-05
+Epoch 189/200
+32/32 - 0s - loss: 3.3299e-05
+Epoch 190/200
+32/32 - 0s - loss: 3.6052e-05
+Epoch 191/200
+32/32 - 0s - loss: 4.5110e-05
+Epoch 192/200
+32/32 - 0s - loss: 8.6941e-05
+Epoch 193/200
+32/32 - 0s - loss: 9.3444e-05
+Epoch 194/200
+32/32 - 0s - loss: 1.0994e-04
+Epoch 195/200
+32/32 - 0s - loss: 1.7622e-04
+Epoch 196/200
+32/32 - 0s - loss: 1.1419e-04
+Epoch 197/200
+32/32 - 0s - loss: 1.6107e-04
+Epoch 198/200
+32/32 - 0s - loss: 1.0004e-04
+Epoch 199/200
+32/32 - 0s - loss: 1.3258e-04
+Epoch 200/200
+
+Epoch 00200: saving model to <some path>/fhn_dnn/tensorflow/runs/model_dir/model.ckpt-0200
+32/32 - 0s - loss: 1.2599e-04
+[run_dnn] Evaluate
+[run_dnn] Evaluate
+[run_dnn] - R2 score (train): [0.9981617018157083, 0.996508450183192] 0.9973350759533419
+[run_dnn] - R2 score (eval):  [0.9624547559976449, 0.9344410604628883] 0.948447907358751
+[run_dnn] Runtime [sec]
+[run_dnn] - train: 35.885760159
+[run_dnn] - eval:  0.24639700499999861
+[run_dnn] Runtime statistics
+[run_dnn] - train - #epochs:          200
+[run_dnn] - train - #steps:           6400
+[run_dnn] - train - #samples (total): 204800
+[run_dnn] - train - avg. steps/sec:   178.34372106493907
+[run_dnn] - train - avg. samples/sec: 5706.99907407805
+[run_dnn] - eval  - #samples:         2048
+[run_dnn] - eval  - avg. samples/sec: 8311.78934175767
