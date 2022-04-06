@@ -13,8 +13,9 @@ It was published in the proceedings of the conference for Mathematical and Scien
 ## Running the code
 
 The executable code is located in the directory `tensorflow`.
-To run, execute the script `run_dnn.py`.
+To run, `cd` into `tensorflow` and execute the script `run_dnn.py`.
 Different options for the inference can be set by modifying the file `config/params.yaml`.
+A reference output to compare the results on your machine is provided in the file `run_ddn_ref.out`.
 
 The data for the training and evaluating the trained DNN models is located in the directory `data/float32`.
 
