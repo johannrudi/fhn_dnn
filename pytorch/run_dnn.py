@@ -4,16 +4,22 @@ Run Script
 
 import argparse, os, pprint, timeit, sys
 import numpy as np
-import tensorflow as tf
+import torch
+from torch.utils.tensorboard import SummaryWriter
+import torch.optim as optim
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 
-from tensorflow.estimator import (ModeKeys)
 from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataset)
-from model import (create_denseNN, create_convNN)
+from model_pytorch import (create_denseNN, create_convNN)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (load_parameters, save_parameters, update_parameters_from_args)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def run(args, params):
     _prefix          = '[run_dnn]'
@@ -21,14 +27,14 @@ def run(args, params):
     model_type       = params['model']['model_type'].casefold()
     enable_verbose   = params['runconfig']['verbose']
 
-    # set environment
+   # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
     if   'TRAIN'.casefold() == mode_name:
-        mode = ModeKeys.TRAIN
+        mode = "train"
     elif 'EVAL'.casefold() == mode_name:
-        mode = ModeKeys.EVAL
+        mode = "eval"
     elif 'PREDICT'.casefold() == mode_name:
-        mode = ModeKeys.PREDICT
+        mode = "predict"
     else:
         raise ValueError('Unknown value for mode: '+mode_name)
 
@@ -37,10 +43,10 @@ def run(args, params):
         np.random.seed(params['data']['random_seed'])
         tf.random.set_seed(params['data']['random_seed'])
 
-    # print environment
+       # print environment
     print(_prefix, 'Environment')
     print(_prefix, '- Directory:         ', self_dir)
-    print(_prefix, '- TensorFlow version:', tf.version.VERSION)
+    print(_prefix, '- PyTorch version:   ', torch.__version__)
     print(_prefix, '- Mode name:         ', mode_name)
     print(_prefix, '- Mode key:          ', mode)
     print(_prefix, '- Seed:              ', params['data']['random_seed'])
