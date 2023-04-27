@@ -88,5 +88,3 @@ class create_convNN(nn.Module):
             x = layer(x)
         x = self.output_layer(x)
         return x
-
-

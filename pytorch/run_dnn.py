@@ -20,14 +20,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (load_parameters, save_parameters, update_parameters_from_args)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 def run(args, params):
     _prefix          = '[run_dnn]'
     mode_name        = params['runconfig']['mode'].casefold()
     model_type       = params['model']['model_type'].casefold()
     enable_verbose   = params['runconfig']['verbose']
 
-   # set environment
+    # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
     if   'TRAIN'.casefold() == mode_name:
         mode = "train"
@@ -41,9 +40,9 @@ def run(args, params):
     # fix random seed for reproducibility
     if params['data']['random_seed'] is not None:
         np.random.seed(params['data']['random_seed'])
-        tf.random.set_seed(params['data']['random_seed'])
+        torch.manual_seed(params['data']['random_seed'])
 
-       # print environment
+    # print environment
     print(_prefix, 'Environment')
     print(_prefix, '- Directory:         ', self_dir)
     print(_prefix, '- PyTorch version:   ', torch.__version__)
@@ -98,44 +97,62 @@ def run(args, params):
         raise NotImplementedError()
     if enable_verbose:
         print(_prefix, 'Model summary')
-        model.summary()
+        print(model)
 
     # load model weights
     if params['runconfig']['model_load']:
         model_path = os.path.join(self_dir, params['runconfig']['model_load'])
-        model.load_weights(model_path)
+        model.load_state_dict(torch.load(model_path))
 
     #
     # Training
     #
 
-    if ModeKeys.TRAIN == mode:
+    if mode == 'train':
         print(_prefix, 'Train')
 
-        # compile model
-        optimizer = tf.keras.optimizers.Adam(learning_rate=params['optimizer']['learning_rate'],
-                                             beta_1=params['optimizer']['beta1'],
-                                             beta_2=params['optimizer']['beta2'],
-                                             epsilon=params['optimizer']['epsilon'])
-        loss = tf.keras.losses.MeanSquaredError()
-        model.compile(optimizer=optimizer, loss=loss)
+        # create optimizer and loss function
+        optimizer = torch.optim.Adam(model.parameters(), lr=params['optimizer']['learning_rate'],
+                                     betas=(params['optimizer']['beta1'], params['optimizer']['beta2']),
+                                     eps=params['optimizer']['epsilon'])
+        loss_func = torch.nn.MSELoss()
 
         # create a callback that saves the model's weights
         checkpoint_path = os.path.join(self_dir, params['runconfig']['model_dir'], 'model.ckpt-{epoch:04d}')
-        checkpoint_freq = params['runconfig']['save_checkpoints_steps'] * \
-                          (params['data']['Ntrain'] // params['data']['train_batch_size'])
-        checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-                filepath=checkpoint_path,
-                save_weights_only=True,
-                save_freq=checkpoint_freq,
-                verbose=1)
-        tensorboard_path = os.path.join(self_dir, params['runconfig']['model_dir'])
-        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_path, histogram_freq=1)
-        callbacks = [checkpoint_callback, tensorboard_callback]
+        checkpoint_freq = params['runconfig']['save_checkpoints_steps'] * (
+                    params['data']['Ntrain'] // params['data']['train_batch_size'])
+        checkpoint_callback = torch.utils.tensorboard.SummaryWriter(log_dir=checkpoint_path, save_steps=checkpoint_freq,
+                                                                    flush_secs=1)
 
         # fit model
         time_train = timeit.default_timer()
-        history    = model.fit(dataset, epochs=params['training']['epochs'], callbacks=callbacks, verbose=2)
+        for epoch in range(params['training']['epochs']):
+            for i, data in enumerate(dataset):
+                # set model to training mode
+                model.train()
+
+                # get input and target tensors
+                inputs, targets = data
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
+                # zero the gradients
+                optimizer.zero_grad()
+                # forward pass
+                outputs = model(inputs)
+
+                # calculate loss and backward pass
+                loss = loss_func(outputs, targets)
+                loss.backward()
+
+                # update model parameters
+                optimizer.step()
+
+                # log metrics
+                if i % params['runconfig']['log_steps'] == 0:
+                    checkpoint_callback.add_scalar('loss', loss.item(), i + epoch * (
+                                params['data']['Ntrain'] // params['data']['train_batch_size']))
+
         time_train = timeit.default_timer() - time_train
 
     #
@@ -219,11 +236,20 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(features_train, labels_train,
-             features_test,  labels_test,
-             model, params):
-    labels_train_predict = model.predict(features_train)
-    labels_test_predict  = model.predict(features_test)
+def evaluate(features_train, labels_train, features_test, labels_test, model, params):
+    model = model.to(device)
+    model.eval()
+
+    with torch.no_grad():
+        features_train_tensor = torch.tensor(features_train, dtype=torch.float32).to(device)
+        features_test_tensor = torch.tensor(features_test, dtype=torch.float32).to(device)
+
+        labels_train_predict_tensor = model(features_train_tensor)
+        labels_test_predict_tensor = model(features_test_tensor)
+
+        labels_train_predict = labels_train_predict_tensor.cpu().numpy()
+        labels_test_predict = labels_test_predict_tensor.cpu().numpy()
+
     return labels_train_predict, labels_test_predict
 
 ###############################################################################

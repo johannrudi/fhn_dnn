@@ -138,3 +138,40 @@ def create_dataset(params, mode, features_train, features_validate, features_tes
     labels_train = torch.from_numpy(labels_train)
     labels_validate = torch.from_numpy(labels_validate)
     labels_test = torch.from_numpy(labels_test)
+
+    # create the dataset
+    if enable_verbose: print('[create_dataset]', 'Create new dataset from tensor slices')
+    if enable_training:
+        dataset = torch.utils.data.TensorDataset(features_train, labels_train)
+    else:
+        dataset = torch.utils.data.TensorDataset(features_test, labels_test)
+
+    # shuffle the dataset
+    if enable_training and params['data']['train_shuffle_buffer_size']:
+        bufsiz  = params['data']['train_shuffle_buffer_size']
+        rndseed = params['data']['random_seed']
+        if enable_verbose: print('[create_dataset]', 'Shuffle the dataset, buffer size', bufsiz, 'random seed', rndseed)
+        dataset = torch.utils.data.RandomSampler(dataset, replacement=True, num_samples=None, generator=None)
+        dataset = torch.utils.data.DataLoader(dataset, batch_size=params['data']['train_batch_size'], shuffle=True, num_workers=0)
+
+    # repeat the dataset
+    if enable_training and repeat:
+        if enable_verbose: print('[create_dataset]', 'Repeat the dataset')
+        dataset = torch.utils.data.ConcatDataset([dataset] * params['data']['train_epochs'])
+
+    # batch the dataset
+    if enable_training:
+        if enable_verbose: print('[create_dataset]', 'Batch the dataset, batch size', params['data']['train_batch_size'])
+        dataset = DataLoader(dataset, batch_size=params['data']['train_batch_size'], drop_last=True, shuffle=True)
+    else:
+        if enable_verbose: print('[create_dataset]', 'Batch the dataset, batch size', params['data']['eval_batch_size'])
+        dataset = DataLoader(dataset, batch_size=params['data']['eval_batch_size'], drop_last=True, shuffle=True)
+
+    # activate prefetching
+    if prefetch:
+        if enable_verbose: print('[create_dataset]', 'Prefetch the dataset')
+        dataset = torch.utils.data.DataLoader(dataset, prefetch_factor=2, num_workers=0, pin_memory=True)
+
+    # return dataset
+    return dataset
+
