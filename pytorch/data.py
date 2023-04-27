@@ -3,9 +3,13 @@ Handling of Data
 """
 
 import numpy as np
-import pathlib
+import os, pathlib, sys
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
+from utils import ModeKeys
+
 
 def load_data(params):
     enable_verbose = params['runconfig']['verbose']
@@ -53,10 +57,10 @@ def load_data(params):
 
     # reshape / expand dims
     if 2 == features.ndim:
-        features = np.expand_dims(features, axis=2)
+        features = np.expand_dims(features, axis=1)
         if features_noise is not None:
             assert 2 == features_noise.ndim
-            features_noise = np.expand_dims(features_noise, axis=2)
+            features_noise = np.expand_dims(features_noise, axis=1)
 
     # set dimensions
     params['model']['num_features'] = features.shape[1:]
@@ -128,7 +132,7 @@ def create_dataset(params, mode, features_train, features_validate, features_tes
                    labels_train, labels_validate, labels_test, repeat=False, prefetch=False):
     """ Creates a PyTorch dataset from numpy arrays. Ref: https://pytorch.org/docs/stable/data.html
     """
-    enable_training = (mode == "train")
+    enable_training = (mode == ModeKeys.TRAIN)
     enable_verbose  = params['runconfig']['verbose']
 
     # convert numpy arrays to PyTorch tensors

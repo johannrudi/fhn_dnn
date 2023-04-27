@@ -1,5 +1,35 @@
 """
-Utilities
+Enumerators
+"""
+
+import enum
+
+class ModeKeys(enum.Enum):
+    TRAIN   = enum.auto()
+    EVAL    = enum.auto()
+    PREDICT = enum.auto()
+
+    @staticmethod
+    def get_from_name(name):
+        for mode in ModeKeys:
+            if mode.name.casefold() == name.casefold():
+                return mode
+        raise ValueError('Unknown name for mode: '+name)
+
+
+class ModelType(enum.Enum):
+    DENSENET = enum.auto()
+    CONVNET  = enum.auto()
+
+    @staticmethod
+    def get_from_name(name):
+        for mode in ModelType:
+            if mode.name.casefold() == name.casefold():
+                return mode
+        raise ValueError('Unknown name for model type: '+name)
+
+"""
+Runtime parameters
 """
 
 import os

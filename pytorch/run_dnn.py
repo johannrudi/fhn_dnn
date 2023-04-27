@@ -4,50 +4,44 @@ Run Script
 
 import argparse, os, pprint, timeit, sys
 import numpy as np
-import torch
-from torch.utils.tensorboard import SummaryWriter
-import torch.optim as optim
-import torch.nn as nn
-from torch.utils.data import DataLoader
-
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataset)
-from model_pytorch import (create_denseNN, create_convNN)
+from model import (create_denseNet, create_convNet)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
-from utils import (load_parameters, save_parameters, update_parameters_from_args)
+from utils import (ModeKeys, ModelType, load_parameters, save_parameters, update_parameters_from_args)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ^TODO review usage of device variable
 def run(args, params):
     _prefix          = '[run_dnn]'
-    mode_name        = params['runconfig']['mode'].casefold()
-    model_type       = params['model']['model_type'].casefold()
+    mode_name        = params['runconfig']['mode']
+    model_type_name  = params['model']['model_type']
     enable_verbose   = params['runconfig']['verbose']
 
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
-    if   'TRAIN'.casefold() == mode_name:
-        mode = "train"
-    elif 'EVAL'.casefold() == mode_name:
-        mode = "eval"
-    elif 'PREDICT'.casefold() == mode_name:
-        mode = "predict"
-    else:
-        raise ValueError('Unknown value for mode: '+mode_name)
+    mode = ModeKeys.get_from_name(mode_name)
+    model_type = ModelType.get_from_name(model_type_name)
 
     # fix random seed for reproducibility
-    if params['data']['random_seed'] is not None:
+    if 'random_seed' in params['data'] and params['data']['random_seed'] is not None:
         np.random.seed(params['data']['random_seed'])
         torch.manual_seed(params['data']['random_seed'])
+    else:
+        params['data']['random_seed'] = None
 
     # print environment
     print(_prefix, 'Environment')
     print(_prefix, '- Directory:         ', self_dir)
     print(_prefix, '- PyTorch version:   ', torch.__version__)
-    print(_prefix, '- Mode name:         ', mode_name)
-    print(_prefix, '- Mode key:          ', mode)
+    print(_prefix, '- Mode name ; key:   ', mode_name, ';', mode)
+    print(_prefix, '- Model type ; key:  ', model_type_name, ';', model_type)
     print(_prefix, '- Seed:              ', params['data']['random_seed'])
 
     # print parameters
@@ -89,10 +83,10 @@ def run(args, params):
                              labels_train,   labels_validate,   labels_test)
 
     # create model
-    if   'denseNN'.casefold() == model_type:
-        model = create_denseNN(params)
-    elif 'convNN'.casefold() == model_type:
-        model = create_convNN(params)
+    if ModelType.DENSENET == model_type:
+        model = create_denseNet(params)
+    elif ModelType.CONVNET == model_type:
+        model = create_convNet(params)
     else:
         raise NotImplementedError()
     if enable_verbose:
@@ -108,25 +102,25 @@ def run(args, params):
     # Training
     #
 
-    if mode == 'train':
+    if ModeKeys.TRAIN == mode:
         print(_prefix, 'Train')
 
         # create optimizer and loss function
         optimizer = torch.optim.Adam(model.parameters(), lr=params['optimizer']['learning_rate'],
                                      betas=(params['optimizer']['beta1'], params['optimizer']['beta2']),
                                      eps=params['optimizer']['epsilon'])
-        loss_func = torch.nn.MSELoss()
+        loss_fn = torch.nn.MSELoss()
 
         # create a callback that saves the model's weights
         checkpoint_path = os.path.join(self_dir, params['runconfig']['model_dir'], 'model.ckpt-{epoch:04d}')
         checkpoint_freq = params['runconfig']['save_checkpoints_steps'] * (
                     params['data']['Ntrain'] // params['data']['train_batch_size'])
-        checkpoint_callback = torch.utils.tensorboard.SummaryWriter(log_dir=checkpoint_path, save_steps=checkpoint_freq,
-                                                                    flush_secs=1)
+        checkpoint_callback = SummaryWriter(log_dir=checkpoint_path, #save_steps=checkpoint_freq,
+                                            flush_secs=1)
 
         # fit model
         time_train = timeit.default_timer()
-        for epoch in range(params['training']['epochs']):
+        for epoch in tqdm(range(params['training']['epochs'])):
             for i, data in enumerate(dataset):
                 # set model to training mode
                 model.train()
@@ -142,7 +136,7 @@ def run(args, params):
                 outputs = model(inputs)
 
                 # calculate loss and backward pass
-                loss = loss_func(outputs, targets)
+                loss = loss_fn(outputs, targets)
                 loss.backward()
 
                 # update model parameters
@@ -152,7 +146,6 @@ def run(args, params):
                 if i % params['runconfig']['log_steps'] == 0:
                     checkpoint_callback.add_scalar('loss', loss.item(), i + epoch * (
                                 params['data']['Ntrain'] // params['data']['train_batch_size']))
-
         time_train = timeit.default_timer() - time_train
 
     #
@@ -236,7 +229,9 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(features_train, labels_train, features_test, labels_test, model, params):
+def evaluate(features_train, labels_train,
+             features_test,  labels_test,
+             model, params):
     model = model.to(device)
     model.eval()
 

@@ -4,45 +4,49 @@ Run Script
 
 import argparse, os, pprint, timeit, sys
 import numpy as np
-import tensorflow as tf
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 
-from tensorflow.estimator import (ModeKeys)
+import tensorflow as tf
+from tensorflow.estimator import ModeKeys
+
 from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataset)
 from model import (create_denseNN, create_convNN)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
-from utils import (load_parameters, save_parameters, update_parameters_from_args)
+from utils import (ModelType, load_parameters, save_parameters, update_parameters_from_args)
 
 def run(args, params):
     _prefix          = '[run_dnn]'
-    mode_name        = params['runconfig']['mode'].casefold()
-    model_type       = params['model']['model_type'].casefold()
+    mode_name        = params['runconfig']['mode']
+    model_type_name  = params['model']['model_type']
     enable_verbose   = params['runconfig']['verbose']
 
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
-    if   'TRAIN'.casefold() == mode_name:
+    if   'TRAIN'.casefold() == mode_name.casefold():
         mode = ModeKeys.TRAIN
-    elif 'EVAL'.casefold() == mode_name:
+    elif 'EVAL'.casefold() == mode_name.casefold():
         mode = ModeKeys.EVAL
-    elif 'PREDICT'.casefold() == mode_name:
+    elif 'PREDICT'.casefold() == mode_name.casefold():
         mode = ModeKeys.PREDICT
     else:
         raise ValueError('Unknown value for mode: '+mode_name)
+    model_type = ModelType.get_from_name(model_type_name)
 
     # fix random seed for reproducibility
-    if params['data']['random_seed'] is not None:
+    if 'random_seed' in params['data'] and params['data']['random_seed'] is not None:
         np.random.seed(params['data']['random_seed'])
         tf.random.set_seed(params['data']['random_seed'])
+    else:
+        params['data']['random_seed'] = None
 
     # print environment
     print(_prefix, 'Environment')
     print(_prefix, '- Directory:         ', self_dir)
     print(_prefix, '- TensorFlow version:', tf.version.VERSION)
-    print(_prefix, '- Mode name:         ', mode_name)
-    print(_prefix, '- Mode key:          ', mode)
+    print(_prefix, '- Mode name ; key:   ', mode_name, ';', mode)
+    print(_prefix, '- Model type ; key:  ', model_type_name, ';', model_type)
     print(_prefix, '- Seed:              ', params['data']['random_seed'])
 
     # print parameters
@@ -84,9 +88,9 @@ def run(args, params):
                              labels_train,   labels_validate,   labels_test)
 
     # create model
-    if   'denseNN'.casefold() == model_type:
+    if ModelType.DENSENET == model_type:
         model = create_denseNN(params)
-    elif 'convNN'.casefold() == model_type:
+    elif ModelType.CONVNET == model_type:
         model = create_convNN(params)
     else:
         raise NotImplementedError()
@@ -106,13 +110,14 @@ def run(args, params):
     if ModeKeys.TRAIN == mode:
         print(_prefix, 'Train')
 
-        # compile model
+        # create optimizer and loss function
         optimizer = tf.keras.optimizers.Adam(learning_rate=params['optimizer']['learning_rate'],
-                                             beta_1=params['optimizer']['beta1'],
-                                             beta_2=params['optimizer']['beta2'],
+                                             beta_1=params['optimizer']['beta1'], beta_2=params['optimizer']['beta2'],
                                              epsilon=params['optimizer']['epsilon'])
-        loss = tf.keras.losses.MeanSquaredError()
-        model.compile(optimizer=optimizer, loss=loss)
+        loss_fn = tf.keras.losses.MeanSquaredError()
+
+        # compile model
+        model.compile(optimizer=optimizer, loss=loss_fn)
 
         # create a callback that saves the model's weights
         checkpoint_path = os.path.join(self_dir, params['runconfig']['model_dir'], 'model.ckpt-{epoch:04d}')

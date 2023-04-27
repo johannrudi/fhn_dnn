@@ -1,27 +1,41 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
+import numpy as np
 
 
-class create_denseNN(nn.Module):
+def _get_activation(name):
+    if 'relu' == name.casefold():
+        return nn.ReLU()
+    elif 'silu' == name.casefold() or 'swish' == name.casefold():
+        return nn.SiLU()
+    else:
+        raise ValueError('Unknown name for activation function: '+name)
+
+
+class create_denseNet(nn.Module):
     def __init__(self, params):
-        super(create_denseNN, self).__init__()
+        super().__init__()
         model_params = params['model']
-        self.flatten = nn.Flatten()  # flatten the input tensor
-        self.hidden_layers = nn.ModuleList()  # list of hidden layers
+        activation_fn = _get_activation(model_params['activation_fn'])
+        self.flatten = nn.Flatten()  # flattens the input tensor
 
-        # create dense layers
-        for layer_size in model_params['dense_layer_sizes']:
+        # create linear layers
+        self.hidden_layers = nn.ModuleList()  # list of hidden layers
+        in_features = model_params['num_features'][1]
+        for out_features in model_params['dense_layer_sizes']:
             self.hidden_layers.append(nn.Sequential(
-                nn.Linear(model_params['num_features'], layer_size),
-                nn.ReLU(),
+                nn.Linear(in_features, out_features),
+                activation_fn,
                 nn.Dropout(p=model_params['dropout']) if model_params['dropout'] else nn.Identity()
             ).apply(self.init_weights))
+            in_features = out_features
 
         # set output layer
         self.output_layer = nn.Sequential(
-            nn.Linear(model_params['dense_layer_sizes'][-1], model_params['num_labels']),
+            nn.Linear(in_features, model_params['num_labels']),
             nn.Sigmoid()
         ).apply(self.init_weights)
+
     def init_weights(self,m):
         if isinstance(m, nn.Linear):
             nn.init.xavier_uniform_(m.weight)
@@ -34,57 +48,71 @@ class create_denseNN(nn.Module):
         return x
 
 
-class create_convNN(nn.Module):
+def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
+    return int( (in_length + 2*padding - dilation*(kernel_size - 1) - 1) / stride + 1 )
+
+
+class create_convNet(nn.Module):
     def __init__(self, params):
-        super(create_convNN, self).__init__()
+        super().__init__()
         model_params = params['model']
+        activation_fn = _get_activation(model_params['activation_fn'])
         initializer = nn.init.xavier_uniform_  # use Xavier initialization
         conv_kernel = 3
-        conv_strides = 2
-        conv_padding = 'valid'  # 'valid' or 'same'
-        pool_fn = nn.AvgPool1d  # AveragePooling1D or MaxPooling1D
-        pool_size = 2
-        pool_strides = 2
-        pool_padding = 'valid'  # 'valid' or 'same'
-        self.conv_layers = nn.ModuleList()  # list of convolutional layers
+        conv_stride = 2
+        conv_padding = 0
+        pool_fn = nn.AvgPool1d  # AvgPool1d or MaxPool1d
+        pool_kernel = 2
+        pool_stride = 2
+        pool_padding = 0
 
         # create convolutional layers
-        for i, filter_size in enumerate(model_params['conv_layer_sizes']):
+        self.hidden_conv_layers = nn.ModuleList()  # list of convolutional layers
+        in_channels = model_params['num_features'][0]
+        n_features = model_params['num_features'][1]
+        for i, out_channels in enumerate(model_params['conv_layer_sizes']):
             if i > 0:  # apply pooling after the first convolutional layer
-                self.conv_layers.append(pool_fn(kernel_size=pool_size, stride=pool_strides, padding=pool_padding))
-            self.conv_layers.append(nn.Sequential(
-                nn.Conv1d(model_params['num_features'], filter_size, conv_kernel, stride=conv_strides,
-                          padding=conv_padding),
-                nn.ReLU(),
+                self.hidden_conv_layers.append(
+                        pool_fn(kernel_size=pool_kernel, stride=pool_stride, padding=pool_padding))
+                n_features = _get_conv1d_length(n_features, pool_kernel,
+                                                stride=pool_stride, padding=pool_padding)
+            self.hidden_conv_layers.append(nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, conv_kernel,
+                          stride=conv_stride, padding=conv_padding),
+                activation_fn,
                 nn.Dropout(p=model_params['dropout']) if model_params['dropout'] else nn.Identity()
             ).apply(self.init_weights))
+            in_channels = out_channels
+            n_features = _get_conv1d_length(n_features, conv_kernel,
+                                            stride=conv_stride, padding=conv_padding)
 
-        # create dense layers
-        self.hidden_layers = nn.ModuleList()
-        num_conv_layers = len(model_params['conv_layer_sizes'])
-        num_features = model_params['num_features'] // (
-                    2 ** num_conv_layers)  # calculate the number of features after convolution and pooling
-        for layer_size in model_params['dense_layer_sizes']:
-            self.hidden_layers.append(nn.Sequential(
-                nn.Linear(num_features * model_params['conv_layer_sizes'][-1], layer_size),
-                nn.ReLU(),
+        # create linear layers
+        self.flatten = nn.Flatten()  # flattens the input tensor
+        self.hidden_linear_layers = nn.ModuleList()  # list of linear layers
+        in_features = n_features * out_channels
+        for out_features in model_params['dense_layer_sizes']:
+            self.hidden_linear_layers.append(nn.Sequential(
+                nn.Linear(in_features, out_features),
+                activation_fn,
                 nn.Dropout(p=model_params['dropout']) if model_params['dropout'] else nn.Identity()
             ).apply(self.init_weights))
-            num_features = layer_size  # update the number of features for the next hidden layer
+            in_features = out_features
 
         # set output layer
         self.output_layer = nn.Sequential(
-            nn.Linear(model_params['dense_layer_sizes'][-1], model_params['num_labels']),
+            nn.Linear(in_features, model_params['num_labels']),
             nn.Sigmoid()
         ).apply(self.init_weights)
+
     def init_weights(self,m):
         if isinstance(m, nn.Linear):
             nn.init.xavier_uniform_(m.weight)
+
     def forward(self, x):
-        for layer in self.conv_layers:
+        for layer in self.hidden_conv_layers:
             x = layer(x)
-        x = x.flatten(start_dim=1)
-        for layer in self.hidden_layers:
+        x = self.flatten(x)
+        for layer in self.hidden_linear_layers:
             x = layer(x)
         x = self.output_layer(x)
         return x
