@@ -1,0 +1,107 @@
+[run_dnn] Environment
+[run_dnn] - Directory:          /Users/jrudi/code/neuroscience/fhn/fhn_dnn/pytorch
+[run_dnn] - PyTorch version:    1.13.0
+[run_dnn] - Mode name ; key:    train ; ModeKeys.TRAIN
+[run_dnn] - Model type ; key:   convNet ; ModelType.CONVNET
+[run_dnn] - Seed:               123
+[run_dnn] Parameters
+{   'data': {   'Ntest': 2048,
+                'Ntrain': 1024,
+                'Nvalidate': 0,
+                'data_dir': '../data/float32',
+                'data_type': 'TIME_NOISE',
+                'eval_batch_size': 32,
+                'random_seed': 123,
+                'train_batch_size': 32,
+                'train_shuffle_buffer_size': 1000},
+    'description': 'Options for FHN-ODE inference',
+    'model': {   'activation_fn': 'swish',
+                 'conv_layer_sizes': [8, 16, 32],
+                 'dense_layer_sizes': [32, 32],
+                 'dropout': None,
+                 'model_type': 'convNet'},
+    'optimizer': {   'beta1': 0.9,
+                     'beta2': 0.999,
+                     'epsilon': 1e-08,
+                     'learning_rate': 0.002},
+    'runconfig': {   'debug': True,
+                     'log_steps': 1,
+                     'mode': 'train',
+                     'model_dir': 'runs/model_dir',
+                     'model_load': None,
+                     'params': 'configs/params.yaml',
+                     'save_checkpoints_steps': 50,
+                     'verbose': True},
+    'training': {'epochs': 200}}
+[load_data] features shape: (10000, 1000) - dtype: float32
+[load_data] labels shape:   (10000, 2) - dtype: float32
+[load_data] features_noise shape: (10000, 1000) - dtype: float32
+[load_data] Ns: 10000
+[load_data] Ntrain:    1024
+[load_data] Nvalidate: 0
+[load_data] Ntest:     2048
+[run_dnn] features_train shape: (1024, 1, 1000)
+[run_dnn] features_test shape:  (2048, 1, 1000)
+[run_dnn] labels_train shape:   (1024, 2)
+[run_dnn] labels_test shape:    (2048, 2)
+[run_dnn] num_features:         (1, 1000)
+[run_dnn] num_labels:           2
+[run_dnn] features scale:       {'shift': 0.0, 'mult': 1.0}
+[run_dnn] labels scale:         {'shift': array([[-0.19046102, -0.39422134]], dtype=float32), 'mult': array([[1.1864839, 1.5862216]], dtype=float32)}
+[create_dataset] Create new dataset
+[create_dataset] Create new dataloader
+[run_dnn] Model summary
+create_convNet(
+  (hidden_conv_layers): ModuleList(
+    (0): Sequential(
+      (0): Conv1d(1, 8, kernel_size=(3,), stride=(2,))
+      (1): SiLU()
+      (2): Identity()
+    )
+    (1): AvgPool1d(kernel_size=(2,), stride=(2,), padding=(0,))
+    (2): Sequential(
+      (0): Conv1d(8, 16, kernel_size=(3,), stride=(2,))
+      (1): SiLU()
+      (2): Identity()
+    )
+    (3): AvgPool1d(kernel_size=(2,), stride=(2,), padding=(0,))
+    (4): Sequential(
+      (0): Conv1d(16, 32, kernel_size=(3,), stride=(2,))
+      (1): SiLU()
+      (2): Identity()
+    )
+  )
+  (flatten): Flatten(start_dim=1, end_dim=-1)
+  (hidden_linear_layers): ModuleList(
+    (0): Sequential(
+      (0): Linear(in_features=960, out_features=32, bias=True)
+      (1): SiLU()
+      (2): Identity()
+    )
+    (1): Sequential(
+      (0): Linear(in_features=32, out_features=32, bias=True)
+      (1): SiLU()
+      (2): Identity()
+    )
+  )
+  (output_layer): Sequential(
+    (0): Linear(in_features=32, out_features=2, bias=True)
+    (1): Sigmoid()
+  )
+)
+[run_dnn] Train
+[run_dnn] Evaluate
+[run_dnn] Evaluate
+[run_dnn] - R2 score (train): [0.9941583851855982, 0.9934789623852818] 0.9938186736993255
+[run_dnn] - R2 score (eval):  [0.960527662642807, 0.9285275778893423] 0.9445276193158381
+[run_dnn] Runtime [sec]
+[run_dnn] - train: 50.341970415999995
+[run_dnn] - eval:  0.12790308299999964
+[run_dnn] Runtime statistics
+[run_dnn] - train - #epochs:          200
+[run_dnn] - train - #steps:           6400
+[run_dnn] - train - #samples (total): 204800
+[run_dnn] - train - avg. steps/sec:   127.13050258290869
+[run_dnn] - train - avg. samples/sec: 4068.176082653078
+[run_dnn] - eval  - #samples:         2048
+[run_dnn] - eval  - avg. samples/sec: 16012.123804709272
