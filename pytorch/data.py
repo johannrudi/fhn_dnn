@@ -5,7 +5,7 @@ Handling of Data
 import numpy as np
 import os, pathlib, sys
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import ModeKeys
@@ -128,54 +128,39 @@ def postprocess_labels(labels_train_predict, labels_test_predict, scale):
     labels_test_predict  = labels_test_predict * scale['mult'] + scale['shift']
     return labels_train_predict, labels_test_predict
 
-def create_dataset(params, mode, features_train, features_validate, features_test,
-                   labels_train, labels_validate, labels_test, repeat=False, prefetch=False):
-    """ Creates a PyTorch dataset from numpy arrays. Ref: https://pytorch.org/docs/stable/data.html
+def create_dataloader(params, mode,
+                      features_train, features_validate, features_test,
+                      labels_train,   labels_validate,   labels_test,
+                      train_kwargs={'drop_last':False}):
+    """ Creates a PyTorch dataset and dataloader from numpy arrays.
+        Ref: https://pytorch.org/docs/stable/data.html
     """
     enable_training = (mode == ModeKeys.TRAIN)
     enable_verbose  = params['runconfig']['verbose']
+    if enable_training:
+        batch_size = params['data']['train_batch_size']
+    else:
+        batch_size = params['data']['eval_batch_size']
 
     # convert numpy arrays to PyTorch tensors
-    features_train = torch.from_numpy(features_train)
+    features_train    = torch.from_numpy(features_train)
     features_validate = torch.from_numpy(features_validate)
-    features_test = torch.from_numpy(features_test)
-    labels_train = torch.from_numpy(labels_train)
-    labels_validate = torch.from_numpy(labels_validate)
-    labels_test = torch.from_numpy(labels_test)
+    features_test     = torch.from_numpy(features_test)
+    labels_train      = torch.from_numpy(labels_train)
+    labels_validate   = torch.from_numpy(labels_validate)
+    labels_test       = torch.from_numpy(labels_test)
 
     # create the dataset
-    if enable_verbose: print('[create_dataset]', 'Create new dataset from tensor slices')
+    if enable_verbose: print('[create_dataset]', 'Create new dataset')
     if enable_training:
-        dataset = torch.utils.data.TensorDataset(features_train, labels_train)
+        dataset = TensorDataset(features_train, labels_train)
     else:
-        dataset = torch.utils.data.TensorDataset(features_test, labels_test)
+        dataset = TensorDataset(features_test, labels_test)
 
-    # shuffle the dataset
-    if enable_training and params['data']['train_shuffle_buffer_size']:
-        bufsiz  = params['data']['train_shuffle_buffer_size']
-        rndseed = params['data']['random_seed']
-        if enable_verbose: print('[create_dataset]', 'Shuffle the dataset, buffer size', bufsiz, 'random seed', rndseed)
-        dataset = torch.utils.data.RandomSampler(dataset, replacement=True, num_samples=None, generator=None)
-        dataset = torch.utils.data.DataLoader(dataset, batch_size=params['data']['train_batch_size'], shuffle=True, num_workers=0)
+    # create the dataloader
+    if enable_verbose: print('[create_dataset]', 'Create new dataloader')
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, **train_kwargs)
 
-    # repeat the dataset
-    if enable_training and repeat:
-        if enable_verbose: print('[create_dataset]', 'Repeat the dataset')
-        dataset = torch.utils.data.ConcatDataset([dataset] * params['data']['train_epochs'])
-
-    # batch the dataset
-    if enable_training:
-        if enable_verbose: print('[create_dataset]', 'Batch the dataset, batch size', params['data']['train_batch_size'])
-        dataset = DataLoader(dataset, batch_size=params['data']['train_batch_size'], drop_last=True, shuffle=True)
-    else:
-        if enable_verbose: print('[create_dataset]', 'Batch the dataset, batch size', params['data']['eval_batch_size'])
-        dataset = DataLoader(dataset, batch_size=params['data']['eval_batch_size'], drop_last=True, shuffle=True)
-
-    # activate prefetching
-    if prefetch:
-        if enable_verbose: print('[create_dataset]', 'Prefetch the dataset')
-        dataset = torch.utils.data.DataLoader(dataset, prefetch_factor=2, num_workers=0, pin_memory=True)
-
-    # return dataset
-    return dataset
+    # output
+    return dataloader
 

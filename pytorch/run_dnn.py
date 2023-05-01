@@ -10,7 +10,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataset)
+from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataloader)
 from model import (create_denseNet, create_convNet)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
@@ -77,10 +77,10 @@ def run(args, params):
         print(_prefix, 'features scale:      ', features_scale)
         print(_prefix, 'labels scale:        ', labels_scale)
 
-    # create dataset
-    dataset = create_dataset(params, mode,
-                             features_train, features_validate, features_test,
-                             labels_train,   labels_validate,   labels_test)
+    # create dataloader
+    dataloader = create_dataloader(params, mode,
+                                   features_train, features_validate, features_test,
+                                   labels_train,   labels_validate,   labels_test)
 
     # create model
     if ModelType.DENSENET == model_type:
@@ -121,7 +121,7 @@ def run(args, params):
         # fit model
         time_train = timeit.default_timer()
         for epoch in tqdm(range(params['training']['epochs'])):
-            for i, data in enumerate(dataset):
+            for i, data in enumerate(dataloader):
                 # set model to training mode
                 model.train()
 
