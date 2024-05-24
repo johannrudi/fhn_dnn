@@ -259,7 +259,7 @@ def create_arg_parser():
     parser.add_argument(
         "-p",
         "--params",
-        default='configs/params.yaml',
+        default='./configs/params.yaml',
         help="Path to .yaml file with model parameters",
     )
     parser.add_argument(
