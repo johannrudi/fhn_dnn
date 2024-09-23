@@ -2,15 +2,15 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-###DEV###
-import sys
-sys.path.append('/Users/jrudi/code/dl-kit')
 from dlkit.nets.mlp import MLPModel
 from dlkit.nets.conv import Conv1dModel
+from dlkit.nets.transformer import Transformer1d0dModel
 
 def _get_activation(name):
     if 'relu' == name.casefold():
         return nn.ReLU()
+    elif 'gelu' == name.casefold():
+        return nn.GELU()
     elif 'silu' == name.casefold() or 'swish' == name.casefold():
         return nn.SiLU()
     else:
@@ -52,6 +52,18 @@ def create_convNet(params):
             hidden_dense_layers_sizes=model_params['dense_layer_sizes'],
             hidden_dense_layers_activation=_get_activation(model_params['activation_fn']),
             output_size=model_params['num_labels'],
+            output_layer_activation=nn.Sigmoid(),
+            use_dropout=model_params['dropout']
+    )
+
+def create_transformerNet(params):
+    model_params = params['model']
+    return Transformer1d0dModel(
+            model_params['num_features'][1], # src_size
+            model_params['num_labels'],      # trg_size
+            model_params['transformer_embedding_size'],
+            model_params['transformer_n_heads'],
+            model_params['transformer_feedforward_size'],
             output_layer_activation=nn.Sigmoid(),
             use_dropout=model_params['dropout']
     )
