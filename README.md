@@ -25,7 +25,10 @@ It is required to install the packages:
 
 - matplotlib
 - numpy
-- sklearn
+- pyyaml
+- scikit-learn
+
+- pytorch
 - tensorflow
 
 Additionally, the following standard packages are used:
@@ -36,4 +39,3 @@ Additionally, the following standard packages are used:
 - pprint
 - time
 - sys
-- yaml

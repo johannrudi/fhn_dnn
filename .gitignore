@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+ # Editors
+*~
+[._]*.sw[a-p]
+
+# Mac
+.DS_Store
