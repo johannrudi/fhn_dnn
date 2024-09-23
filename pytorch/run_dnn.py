@@ -8,13 +8,18 @@ import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter #TODO derprecated
 
-from data import (load_data, preprocess_features, preprocess_labels, postprocess_labels, create_dataloader)
-from model import (create_denseNet, create_convNet)
+###DEV###
+sys.path.append('/Users/jrudi/code/dl-kit')
+from dlkit.log.log_util import (logging_set_up, logging_get_logger)
+from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (ModeKeys, ModelType, load_parameters, save_parameters, update_parameters_from_args)
+
+from data import (load_data, preprocess_features, preprocess_features_noise, preprocess_labels, postprocess_labels, create_dataloader)
+from model import (create_denseNet, create_convNet, create_transformerNet)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ^TODO review usage of device variable
@@ -60,38 +65,69 @@ def run(args, params):
 
     # load data
     features_train, features_validate, features_test, \
-    labels_train,   labels_validate,   labels_test  = load_data(params)
+    labels_train,   labels_validate,   labels_test,   \
+    features_noise_train, features_noise_validate, features_noise_test = load_data(params)
 
     # preprocess data
-    features_train, features_test, features_scale = preprocess_features(features_train, features_test, params)
-    labels_train, labels_test,     labels_scale   = preprocess_labels(labels_train, labels_test, params)
+    features_scale = preprocess_features(features_train, features_test, params)
+    labels_scale   = preprocess_labels  (labels_train,   labels_test,   params)
+    preprocess_features_noise(features_noise_train, features_noise_test, features_scale)
 
     # print info about data
-    if enable_verbose:
-        print(_prefix, 'features_train shape:', features_train.shape)
-        print(_prefix, 'features_test shape: ', features_test.shape)
-        print(_prefix, 'labels_train shape:  ', labels_train.shape)
-        print(_prefix, 'labels_test shape:   ', labels_test.shape)
-        print(_prefix, 'num_features:        ', params['model']['num_features'])
-        print(_prefix, 'num_labels:          ', params['model']['num_labels'])
-        print(_prefix, 'features scale:      ', features_scale)
-        print(_prefix, 'labels scale:        ', labels_scale)
+    logging_set_up( os.path.join(self_dir, params['runconfig']['model_dir'], _prefix.strip('[]')) )
+    logger = logging_get_logger(_prefix)
+    logger.info('features_train shape: {}'.format(features_train.shape))
+    logger.info('features_test shape:  {}'.format(features_test.shape))
+    logger.info('num_features:         {}'.format(params['model']['num_features']))
+    logger.info('features scale:       {}'.format(features_scale))
+    logger.info('labels_train shape:   {}'.format(labels_train.shape))
+    logger.info('labels_test shape:    {}'.format(labels_test.shape))
+    logger.info('num_labels:           {}'.format(params['model']['num_labels']))
+    logger.info('labels scale:         {}'.format(labels_scale))
+    if features_noise_train is not None and features_noise_test is not None:
+        logger.info('features_noise_train shape: {}'.format(features_train.shape))
+        logger.info('features_noise_test shape:  {}'.format(features_test.shape))
+
+    # bundle arrays
+    features = {
+        'train':    features_train,
+        'validate': features_validate,
+        'test':     features_test,
+    }
+    targets = {
+        'train':    labels_train,
+        'validate': labels_validate,
+        'test':     labels_test,
+    }
+    if features_noise_train is not None and \
+       features_noise_validate is not None and \
+       features_noise_test is not None:
+        features_noise = {
+            'train':    features_noise_train,
+            'validate': features_noise_validate,
+            'test':     features_noise_test,
+        }
+    else:
+        features_noise = {
+            'train':    None,
+            'validate': None,
+            'test':     None,
+        }
 
     # create dataloader
-    dataloader = create_dataloader(params, mode,
-                                   features_train, features_validate, features_test,
-                                   labels_train,   labels_validate,   labels_test)
+    dataloader = create_dataloader(params, mode, features, targets, features_noise=features_noise)
 
     # create model
     if ModelType.DENSENET == model_type:
         model = create_denseNet(params)
     elif ModelType.CONVNET == model_type:
         model = create_convNet(params)
+    elif ModelType.TRANSFORMERNET == model_type:
+        model = create_transformerNet(params)
     else:
         raise NotImplementedError()
-    if enable_verbose:
-        print(_prefix, 'Model summary')
-        print(model)
+    print(_prefix, 'Model summary')
+    print(model)
 
     # load model weights
     if params['runconfig']['model_load']:
@@ -112,41 +148,44 @@ def run(args, params):
         loss_fn = torch.nn.MSELoss()
 
         # create a callback that saves the model's weights
-        checkpoint_path = os.path.join(self_dir, params['runconfig']['model_dir'], 'model.ckpt-{epoch:04d}')
-        checkpoint_freq = params['runconfig']['save_checkpoints_steps'] * (
-                    params['data']['Ntrain'] // params['data']['train_batch_size'])
-        checkpoint_callback = SummaryWriter(log_dir=checkpoint_path, #save_steps=checkpoint_freq,
-                                            flush_secs=1)
+        checkpoint_dir    = os.path.join(self_dir, params['runconfig']['model_dir'], 'checkpoints')
+        checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
+        #checkpoint_callback = SummaryWriter(log_dir=checkpoint_path, #save_steps=checkpoint_epochs, flush_secs=1)
 
-        # fit model
-        time_train = timeit.default_timer()
-        for epoch in tqdm(range(params['training']['epochs'])):
-            for i, data in enumerate(dataloader):
-                # set model to training mode
-                model.train()
+        # train network
+        train_log = train_epochs(
+                params['training']['epochs'], model, dataloader, optimizer, loss_fn,
+                device=device, logger=logger, checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir
+        )
+        time_train = train_log['time_train']
+#        time_train = timeit.default_timer()
+#        for epoch in tqdm(range(params['training']['epochs'])):
+#            for i, data in enumerate(dataloader):
+#                # set model to training mode
+#                model.train()
 
-                # get input and target tensors
-                inputs, targets = data
-                inputs = inputs.to(device)
-                targets = targets.to(device)
+#                # get input and target tensors
+#                inputs, targets = data
+#                inputs = inputs.to(device)
+#                targets = targets.to(device)
 
-                # zero the gradients
-                optimizer.zero_grad()
-                # forward pass
-                outputs = model(inputs)
+#                # zero the gradients
+#                optimizer.zero_grad()
+#                # forward pass
+#                outputs = model(inputs)
 
-                # calculate loss and backward pass
-                loss = loss_fn(outputs, targets)
-                loss.backward()
+#                # calculate loss and backward pass
+#                loss = loss_fn(outputs, targets)
+#                loss.backward()
 
-                # update model parameters
-                optimizer.step()
+#                # update model parameters
+#                optimizer.step()
 
-                # log metrics
-                if i % params['runconfig']['log_steps'] == 0:
-                    checkpoint_callback.add_scalar('loss', loss.item(), i + epoch * (
-                                params['data']['Ntrain'] // params['data']['train_batch_size']))
-        time_train = timeit.default_timer() - time_train
+#                # log metrics
+#                if i % params['runconfig']['log_steps'] == 0:
+#                    checkpoint_callback.add_scalar('loss', loss.item(), i + epoch * (
+#                                params['data']['Ntrain'] // params['data']['train_batch_size']))
+#        time_train = timeit.default_timer() - time_train
 
     #
     # Evaluation
@@ -154,18 +193,22 @@ def run(args, params):
 
     print(_prefix, 'Evaluate')
 
+    # create dataloader
+    dataloader_eval_train = create_dataloader(params, ModeKeys.TRAIN, features, targets,
+                                              features_noise=features_noise,
+                                              kwargs={'shuffle':False, 'drop_last':False})
+    dataloader_eval_test  = create_dataloader(params, ModeKeys.EVAL, features, targets,
+                                              features_noise=features_noise,
+                                              kwargs={'shuffle':False, 'drop_last':False})
+
     # compute predictions
     time_eval = timeit.default_timer()
-    labels_train_predict, labels_test_predict = evaluate(features_train, labels_train,
-                                                         features_test,  labels_test,
-                                                         model, params)
+    labels_train_predict, labels_test_predict = evaluate(model, dataloader_eval_train, dataloader_eval_test, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
-    labels_train, labels_test = \
-        postprocess_labels(labels_train, labels_test, labels_scale)
-    labels_train_predict, labels_test_predict = \
-        postprocess_labels(labels_train_predict, labels_test_predict, labels_scale)
+    postprocess_labels(labels_train,         labels_test,         labels_scale)
+    postprocess_labels(labels_train_predict, labels_test_predict, labels_scale)
 
     # compute evaluation metrics
     r2_train = [metrics.r2_score(labels_train[:,i], labels_train_predict[:,i]) for i in range(labels_train.shape[1])]
@@ -229,21 +272,28 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(features_train, labels_train,
-             features_test,  labels_test,
-             model, params):
+def evaluate(model, dataloader_eval_train, dataloader_eval_test, params):
     model = model.to(device)
     model.eval()
 
     with torch.no_grad():
-        features_train_tensor = torch.tensor(features_train, dtype=torch.float32).to(device)
-        features_test_tensor = torch.tensor(features_test, dtype=torch.float32).to(device)
+        predict_list = list()
+        for data in dataloader_eval_train:
+            features, targets = data
+            features = features.to(device)
+            targets  = targets.to(device)
+            predict_tensor = model(features)
+            predict_list.append(predict_tensor.cpu().numpy())
+        labels_train_predict = np.concatenate(predict_list, axis=0)
 
-        labels_train_predict_tensor = model(features_train_tensor)
-        labels_test_predict_tensor = model(features_test_tensor)
-
-        labels_train_predict = labels_train_predict_tensor.cpu().numpy()
-        labels_test_predict = labels_test_predict_tensor.cpu().numpy()
+        predict_list = list()
+        for data in dataloader_eval_test:
+            features, targets = data
+            features = features.to(device)
+            targets  = targets.to(device)
+            predict_tensor = model(features)
+            predict_list.append(predict_tensor.cpu().numpy())
+        labels_test_predict = np.concatenate(predict_list, axis=0)
 
     return labels_train_predict, labels_test_predict
 

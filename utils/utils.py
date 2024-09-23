@@ -18,8 +18,9 @@ class ModeKeys(enum.Enum):
 
 
 class ModelType(enum.Enum):
-    DENSENET = enum.auto()
-    CONVNET  = enum.auto()
+    DENSENET       = enum.auto()
+    CONVNET        = enum.auto()
+    TRANSFORMERNET = enum.auto()
 
     @staticmethod
     def get_from_name(name):
