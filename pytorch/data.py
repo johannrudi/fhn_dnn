@@ -4,8 +4,6 @@ Handling of Data
 
 import numpy as np
 import os, pathlib, sys
-import torch
-from torch.utils.data import TensorDataset, DataLoader
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import ModeKeys
@@ -51,7 +49,7 @@ def load_data(params):
         print('[load_data]', 'features shape:', features.shape, '- dtype:', features.dtype)
         print('[load_data]', 'labels shape:  ', labels.shape,   '- dtype:', labels.dtype)
         if features_noise is not None:
-            print('[load_data]', 'features_noise shape:', features_noise.shape,   '- dtype:', features_noise.dtype)
+            print('[load_data]', 'features_noise shape:', features_noise.shape, '- dtype:', features_noise.dtype)
     assert labels.shape[0] == features.shape[0]
     assert features_noise is None or features_noise.shape == features.shape
 
@@ -83,15 +81,29 @@ def load_data(params):
     labels_validate   = labels  [data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
     features_test     = features[-data_params['Ntest']:,...]
     labels_test       = labels  [-data_params['Ntest']:,...]
+    if features_noise is not None:
+        features_noise_train    = features_noise[:data_params['Ntrain'],...]
+        features_noise_validate = features_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
+        features_noise_test     = features_noise[-data_params['Ntest']:,...]
+    else:
+        features_noise_train    = None
+        features_noise_validate = None
+        features_noise_test     = None
 
     # add noise
-    if features_noise is not None:
-        features_train    += features_noise[:data_params['Ntrain'],...]
-        features_validate += features_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-        features_test     += features_noise[-data_params['Ntest']:,...]
+#   if features_noise is not None:
+#       features_train    += features_noise_train
+#       features_validate += features_noise_validate
+#       features_test     += features_noise_test
 
     return features_train, features_validate, features_test, \
-           labels_train,   labels_validate,   labels_test
+           labels_train,   labels_validate,   labels_test, \
+           features_noise_train, features_noise_validate, features_noise_test
+
+def _preprocess_apply_scale(arrays, scale):
+    for a in arrays:
+        np.add(a, -scale['shift'], out=a)
+        np.multiply(a, 1.0/scale['mult'], out=a)
 
 def preprocess_features(features_train, features_test, params):
     data_type = params['data']['data_type'].casefold()
@@ -100,38 +112,77 @@ def preprocess_features(features_train, features_test, params):
        'TIME_NOISE'.casefold() == data_type:
         # nothing to do
         scale = {'shift': 0.0, 'mult': 1.0}
-        return features_train, features_test, scale
     elif 'RATE'.casefold()          == data_type or \
          'RATE_DURATION'.casefold() == data_type:
         features_min = np.zeros((1,features_train.shape[1]))
         features_max = np.expand_dims(np.amax(features_train, axis=0), axis=0)
+        scale = {'shift': features_min, 'mult': (features_max - features_min)}
     else:
         raise ValueError('Unknown parameter for data->data_type')
-    # scale by min and max
-    features_train = (features_train - features_min) / (features_max - features_min)
-    features_test  = (features_test  - features_min) / (features_max - features_min)
-    scale = {'shift': features_min, 'mult': (features_max - features_min)}
-    # return features
-    return features_train, features_test, scale
+    # apply scaling
+    _preprocess_apply_scale((features_train, features_test), scale)
+    # return scale
+    return scale
+
+def preprocess_features_noise(features_noise_train, features_noise_test, scale):
+    if features_noise_train is not None and features_noise_test is not None:
+        # apply scaling
+        _preprocess_apply_scale((features_noise_train, features_noise_test), scale)
 
 def preprocess_labels(labels_train, labels_test, params):
     labels_min = np.expand_dims(np.amin(labels_train, axis=0), axis=0)
     labels_max = np.expand_dims(np.amax(labels_train, axis=0), axis=0)
-    labels_train = (labels_train - labels_min) / (labels_max - labels_min)
-    labels_test  = (labels_test  - labels_min) / (labels_max - labels_min)
     scale = {'shift': labels_min, 'mult': (labels_max - labels_min)}
-    # return labels
-    return labels_train, labels_test, scale
+    # apply scaling
+    _preprocess_apply_scale((labels_train, labels_test), scale)
+    # return scale
+    return scale
+
+def _postprocess_apply_scale(arrays, scale):
+    for a in arrays:
+        np.multiply(a, scale['mult'], out=a)
+        np.add(a, scale['shift'], out=a)
 
 def postprocess_labels(labels_train_predict, labels_test_predict, scale):
-    labels_train_predict = labels_train_predict * scale['mult'] + scale['shift']
-    labels_test_predict  = labels_test_predict * scale['mult'] + scale['shift']
-    return labels_train_predict, labels_test_predict
+    # apply scaling
+    _postprocess_apply_scale((labels_train_predict, labels_test_predict), scale)
 
-def create_dataloader(params, mode,
-                      features_train, features_validate, features_test,
-                      labels_train,   labels_validate,   labels_test,
-                      train_kwargs={'drop_last':False}):
+###############################################################################
+
+import torch
+from torch.utils.data import DataLoader, Dataset, TensorDataset
+
+class FHN_Dataset(Dataset):
+    def __init__(self, features, targets, features_noise=None):
+        super().__init__()
+        self.features = torch.from_numpy(features)
+        self.targets  = torch.from_numpy(targets)
+        assert self.features.size(0) == self.targets.size(0)
+        if features_noise is not None:
+            self.features_noise = torch.from_numpy(features_noise)
+        else:
+            self.features_noise = None
+
+    def __len__(self):
+        return self.features.size(0)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        if self.features_noise is not None:
+            noise_idx = torch.randint(self.features_noise.size(0), (1,))[0]
+            features = self.features[idx] + self.features_noise[noise_idx]
+        else:
+            features = self.features[idx]
+        targets  = self.targets[idx]
+
+        return (features, targets)
+
+
+def create_dataloader(params, mode, features, targets,
+                      features_noise={'train':None, 'validate':None, 'test':None, },
+                      kwargs={'shuffle':True, 'drop_last':False}):
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
@@ -142,24 +193,18 @@ def create_dataloader(params, mode,
     else:
         batch_size = params['data']['eval_batch_size']
 
-    # convert numpy arrays to PyTorch tensors
-    features_train    = torch.from_numpy(features_train)
-    features_validate = torch.from_numpy(features_validate)
-    features_test     = torch.from_numpy(features_test)
-    labels_train      = torch.from_numpy(labels_train)
-    labels_validate   = torch.from_numpy(labels_validate)
-    labels_test       = torch.from_numpy(labels_test)
-
     # create the dataset
-    if enable_verbose: print('[create_dataset]', 'Create new dataset')
+    if enable_verbose: print('[create_dataloader]', 'Create new dataset')
     if enable_training:
-        dataset = TensorDataset(features_train, labels_train)
+        dataset = FHN_Dataset(features['train'], targets['train'],
+                              features_noise=features_noise['train'])
     else:
-        dataset = TensorDataset(features_test, labels_test)
+        dataset = FHN_Dataset(features['test'], targets['test'],
+                              features_noise=features_noise['test'])
 
     # create the dataloader
-    if enable_verbose: print('[create_dataset]', 'Create new dataloader')
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, **train_kwargs)
+    if enable_verbose: print('[create_dataloader]', 'Create new dataloader')
+    dataloader = DataLoader(dataset, batch_size=batch_size, **kwargs)
 
     # output
     return dataloader
