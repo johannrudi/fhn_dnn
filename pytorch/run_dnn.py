@@ -19,10 +19,11 @@ from dlkit.opt.train import train_epochs
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (
     ModeKeys,
-    ModelType,
     load_parameters,
     save_parameters,
-    update_parameters_from_args
+    update_parameters_from_args,
+    save_loss,
+    save_data_vs_predict
 )
 from data import (
     load_data,
@@ -146,19 +147,19 @@ def run(args, params):
 
     print('<evaluate>')
 
-    # create dataloader
-    dataloader_eval_train = create_dataloader(params, logging_get_logger('create_dataloader'), ModeKeys.TRAIN,
-                                              features, targets, features_noise=features_noise,
-                                              item_return_order='yx',
-                                              dataloader_kwargs={'shuffle':False, 'drop_last':False})
-    dataloader_eval_test  = create_dataloader(params, logging_get_logger('create_dataloader'), ModeKeys.EVAL,
-                                              features, targets, features_noise=features_noise,
-                                              item_return_order='yx',
-                                              dataloader_kwargs={'shuffle':False, 'drop_last':False})
+    # create dataloaders
+    dataloader_eval = dict()
+    for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
+        dataloader_eval[key] = create_dataloader(
+                params, logging_get_logger('create_dataloader'), dl_mode,
+                features, targets, features_noise=features_noise,
+                item_return_order='yx',
+                dataloader_kwargs={'shuffle':False, 'drop_last':False}
+        )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    targets_predict = evaluate(net, dataloader_eval_train, dataloader_eval_test, params)
+    targets_predict = evaluate(net, dataloader_eval, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
@@ -198,65 +199,46 @@ def run(args, params):
         logger.info(f"Runtime statistics - eval  - #samples:         {n_samples}")
         logger.info(f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}")
 
-    # plot losses
-    #TODO
+    # plot loss
+    path = os.path.join(self_dir, params['runconfig']['model_dir'], 'loss')
+    save_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
+              loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
 
-    # plot true training values vs. predictions
-    n_plot_cols = targets['train'].shape[1]
-    fig, ax = plt.subplots(1, 2, figsize=(12,3))
-    for i in range(n_plot_cols):
-        ymin = np.amin(targets['train'][:,i])
-        ymax = np.amax(targets['train'][:,i])
-        ax[i].scatter(targets['train'][:,i], targets_predict['train'][:,i], s=4**2, alpha=0.5)
-        ax[i].plot([ymin, ymax], [ymin, ymax], linewidth=3, linestyle='--', color='orange')
-        ax[i].set_xlabel('train value')
-        ax[i].set_ylabel('predicted value')
-        ax[i].set_title('theta_%d'%i)
-        ax[i].grid()
-    fig.tight_layout()
+    # plot true values vs. predictions
+    for key in ['train', 'validate', 'test']:
+        if params['data']['N'+key] <= 0:
+            continue
+        n_targets            = targets[key].shape[-1]
+        targets_plot         = [targets[key][:,i]         for i in range(n_targets)]
+        targets_predict_plot = [targets_predict[key][:,i] for i in range(n_targets)]
+        path = os.path.join(self_dir, params['runconfig']['model_dir'], 'data_vs_predict_'+key)
+        save_data_vs_predict(targets_plot, targets_predict_plot, path,
+                             plot_name=[f"theta_{i}" for i in range(n_targets)],
+                             x_label=n_targets*[f"{key} value"],
+                             y_label=n_targets*[f"predicted value"])
 
-    # plot true testing values vs. predictions
-    n_plot_cols = targets['test'].shape[1]
-    fig, ax = plt.subplots(1, 2, figsize=(12,3))
-    for i in range(n_plot_cols):
-        ymin = np.amin(targets['test'][:,i])
-        ymax = np.amax(targets['test'][:,i])
-        ax[i].scatter(targets['test'][:,i], targets_predict['test'][:,i], s=4**2, alpha=0.5)
-        ax[i].plot([ymin, ymax], [ymin, ymax], linewidth=3, linestyle='--', color='orange')
-        ax[i].set_xlabel('test value')
-        ax[i].set_ylabel('predicted value')
-        ax[i].set_title('theta_%d'%i)
-        ax[i].grid()
-    fig.tight_layout()
-
+    # show plots
     plt.show()
 
 ###############################################################################
 
-def evaluate(net, dataloader_eval_train, dataloader_eval_test, params):
+def evaluate(net, dataloader_eval, params):
     net = net.to(device)
     net.eval()
     # evaluate network predictions
+    targets_predict = dict()
     with torch.no_grad():
-        predict_list = list()
-        for data in dataloader_eval_train:
-            features, targets = data
-            features = features.to(device)
-            targets  = targets.to(device)
-            predict_tensor = net(features)
-            predict_list.append(predict_tensor.cpu().numpy())
-        targets_train_predict = np.concatenate(predict_list, axis=0)
-
-        predict_list = list()
-        for data in dataloader_eval_test:
-            features, targets = data
-            features = features.to(device)
-            targets  = targets.to(device)
-            predict_tensor = net(features)
-            predict_list.append(predict_tensor.cpu().numpy())
-        targets_test_predict = np.concatenate(predict_list, axis=0)
+        for key in dataloader_eval.keys():
+            predict_list = list()
+            for data in dataloader_eval[key]:
+                features, targets = data
+                features = features.to(device)
+                targets  = targets.to(device)
+                predict_tensor = net(features)
+                predict_list.append(predict_tensor.cpu().numpy())
+            targets_predict[key] = np.concatenate(predict_list, axis=0)
     # return predictions
-    return {'train': targets_train_predict, 'test': targets_test_predict}
+    return targets_predict
 
 ###############################################################################
 

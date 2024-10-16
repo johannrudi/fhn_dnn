@@ -10,7 +10,7 @@ from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
 from dlkit.nets.conv import Conv1dModel
 from dlkit.nets.transformer import Transformer1d0dModel
 
-from utils import ModelType
+from utils import NetworkType
 
 ###############################################################################
 
@@ -80,14 +80,14 @@ def create_transformerNet(params, logger):
 
 def create_dnn(params, logger):
     net_params = params['net']
-    net_type   = ModelType.get_from_name(net_params['type'])
+    net_type   = NetworkType.get_from_name(net_params['type'])
     logger.info(f"Network type: {net_params['type']}, key: {net_type}")
     # create network
-    if ModelType.DENSENET == net_type:
+    if NetworkType.DENSENET == net_type:
         net = create_denseNet(params, logger)
-    elif ModelType.CONVNET == net_type:
+    elif NetworkType.CONVNET == net_type:
         net = create_convNet(params, logger)
-    elif ModelType.TRANSFORMERNET == net_type:
+    elif NetworkType.TRANSFORMERNET == net_type:
         net = create_transformerNet(params, logger)
     else:
         raise NotImplementedError()
@@ -97,12 +97,12 @@ def create_dnn(params, logger):
 def create_gan(params, logger):
     g_net_params    = params['g_net']
     d_net_params    = params['d_net']
-    g_net_type      = ModelType.get_from_name(g_net_params['type'])
-    d_net_type      = ModelType.get_from_name(d_net_params['type'])
+    g_net_type      = NetworkType.get_from_name(g_net_params['type'])
+    d_net_type      = NetworkType.get_from_name(d_net_params['type'])
     logger.info(f"Generator type:     {g_net_params['type']}, key: {g_net_type}")
     logger.info(f"Discriminator type: {d_net_params['type']}, key: {d_net_type}")
     # create generator network
-    if ModelType.DENSENET == g_net_type:
+    if NetworkType.DENSENET == g_net_type:
         g_net = MLPModelMultIn(
             (params['data']['num_features'][1], params['data']['latent_dim']), # input_size
             params['data']['num_labels'],                                      # output_size
@@ -111,14 +111,14 @@ def create_gan(params, logger):
             output_layer_activation=nn.Sigmoid(),
             use_dropout=g_net_params['dropout']
         )
-#   elif ModelType.CONVNET == g_net_type:
+#   elif NetworkType.CONVNET == g_net_type:
 #       TODO
-#   elif ModelType.TRANSFORMERNET == g_net_type:
+#   elif NetworkType.TRANSFORMERNET == g_net_type:
 #       TODO
     else:
         raise NotImplementedError()
     # create discriminator network
-    if ModelType.DENSENET == d_net_type:
+    if NetworkType.DENSENET == d_net_type:
         d_net = MLPModelMultIn(
             (params['data']['num_features'][1], params['data']['num_labels']), # input_size
             1,                                                                 # output_size
@@ -126,9 +126,9 @@ def create_gan(params, logger):
             hidden_layers_activation=_get_activation(d_net_params['activation_fn']),
             use_dropout=g_net_params['dropout']
         )
-#   elif ModelType.CONVNET == g_net_type:
+#   elif NetworkType.CONVNET == g_net_type:
 #       TODO
-#   elif ModelType.TRANSFORMERNET == g_net_type:
+#   elif NetworkType.TRANSFORMERNET == g_net_type:
 #       TODO
     else:
         raise NotImplementedError()

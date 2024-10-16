@@ -342,17 +342,21 @@ def create_dataloader(params, logger, mode, features, targets,
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
-    enable_training = (mode == ModeKeys.TRAIN)
-    if enable_training:
+    if ModeKeys.TRAIN == mode or \
+       ModeKeys.VALIDATE == mode:
         batch_size = params['data']['train_batch_size']
     else:
         batch_size = params['data']['eval_batch_size']
 
     # create the dataset
     logger.info('Create new dataset')
-    if enable_training:
+    if ModeKeys.TRAIN == mode:
         dataset = FHN_Dataset(features['train'], targets['train'],
                               features_noise=features_noise['train'],
+                              item_return_order=item_return_order)
+    elif ModeKeys.VALIDATE == mode:
+        dataset = FHN_Dataset(features['validate'], targets['validate'],
+                              features_noise=features_noise['validate'],
                               item_return_order=item_return_order)
     else:
         dataset = FHN_Dataset(features['test'], targets['test'],

@@ -20,6 +20,8 @@ net:
     dense_layer_sizes:
         - 32
         - 32
+        - 32
+        - 32
     activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
     dropout: #0.2
 
