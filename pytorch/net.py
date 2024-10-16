@@ -1,10 +1,18 @@
+"""
+Create neural networks.
+"""
+
 import torch
 import torch.nn as nn
 import numpy as np
 
-from dlkit.nets.mlp import MLPModel
+from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
 from dlkit.nets.conv import Conv1dModel
 from dlkit.nets.transformer import Transformer1d0dModel
+
+from utils import ModelType
+
+###############################################################################
 
 def _get_activation(name):
     if 'relu' == name.casefold():
@@ -19,54 +27,113 @@ def _get_activation(name):
 def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
     return int( (in_length + 2*padding - dilation*(kernel_size - 1) - 1) / stride + 1 )
 
-def create_denseNet(params):
-    model_params = params['model']
+def create_denseNet(params, logger):
+    net_params = params['net']
     return MLPModel(
-            model_params['num_features'][1], # input_size
-            model_params['num_labels'],      # output_size
-            hidden_layers_sizes=model_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(model_params['activation_fn']),
+            params['data']['num_features'][1], # input_size
+            params['data']['num_labels'],      # output_size
+            hidden_layers_sizes=net_params['dense_layer_sizes'],
+            hidden_layers_activation=_get_activation(net_params['activation_fn']),
             output_layer_activation=nn.Sigmoid(),
-            use_dropout=model_params['dropout']
+            use_dropout=net_params['dropout']
     )
 
-def create_convNet(params):
-    model_params = params['model']
-    hidden_conv_layers_kernels = len(model_params['conv_layer_sizes'])*[3]
+def create_convNet(params, logger):
+    net_params = params['net']
+    hidden_conv_layers_kernels = len(net_params['conv_layer_sizes'])*[3]
     hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
     # calculate length of features after convolutional layers
-    n_features = model_params['num_features'][1]
-    for i, _ in enumerate(model_params['conv_layer_sizes']):
+    n_features = params['data']['num_features'][1]
+    for i, _ in enumerate(net_params['conv_layer_sizes']):
         n_features = _get_conv1d_length(n_features, hidden_conv_layers_kernels[i],
                                         stride=hidden_conv_layers_kwargs['stride'],
                                         padding=hidden_conv_layers_kwargs['padding'])
-    n_channels = model_params['conv_layer_sizes'][-1] * model_params['num_features'][0]
+    n_channels = net_params['conv_layer_sizes'][-1] * params['data']['num_features'][0]
     n_features = n_features * n_channels
     return Conv1dModel(
-            model_params['num_features'][0], # input_channels
-            hidden_conv_layers_channels_mult=model_params['conv_layer_sizes'],
+            params['data']['num_features'][0], # input_channels
+            hidden_conv_layers_channels_mult=net_params['conv_layer_sizes'],
             hidden_conv_layers_kernels=hidden_conv_layers_kernels,
-            hidden_conv_layers_activation=_get_activation(model_params['activation_fn']),
+            hidden_conv_layers_activation=_get_activation(net_params['activation_fn']),
             hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
             hidden_dense_input_size=n_features,
-            hidden_dense_layers_sizes=model_params['dense_layer_sizes'],
-            hidden_dense_layers_activation=_get_activation(model_params['activation_fn']),
-            output_size=model_params['num_labels'],
+            hidden_dense_layers_sizes=net_params['dense_layer_sizes'],
+            hidden_dense_layers_activation=_get_activation(net_params['activation_fn']),
+            output_size=params['data']['num_labels'],
             output_layer_activation=nn.Sigmoid(),
-            use_dropout=model_params['dropout']
+            use_dropout=net_params['dropout']
     )
 
-def create_transformerNet(params):
-    model_params = params['model']
+def create_transformerNet(params, logger):
+    net_params = params['net']
     return Transformer1d0dModel(
-            model_params['num_features'][1], # src_size
-            model_params['num_labels'],      # trg_size
-            model_params['transformer_embedding_size'],
-            model_params['transformer_n_heads'],
-            model_params['transformer_feedforward_size'],
+            params['data']['num_features'][1], # src_size
+            params['data']['num_labels'],      # trg_size
+            net_params['transformer_embedding_size'],
+            net_params['transformer_n_heads'],
+            net_params['transformer_feedforward_size'],
             output_layer_activation=nn.Sigmoid(),
-            use_dropout=model_params['dropout']
+            use_dropout=net_params['dropout']
     )
+
+###############################################################################
+
+def create_dnn(params, logger):
+    net_params = params['net']
+    net_type   = ModelType.get_from_name(net_params['type'])
+    logger.info(f"Network type: {net_params['type']}, key: {net_type}")
+    # create network
+    if ModelType.DENSENET == net_type:
+        net = create_denseNet(params, logger)
+    elif ModelType.CONVNET == net_type:
+        net = create_convNet(params, logger)
+    elif ModelType.TRANSFORMERNET == net_type:
+        net = create_transformerNet(params, logger)
+    else:
+        raise NotImplementedError()
+    # return network
+    return net
+
+def create_gan(params, logger):
+    g_net_params    = params['g_net']
+    d_net_params    = params['d_net']
+    g_net_type      = ModelType.get_from_name(g_net_params['type'])
+    d_net_type      = ModelType.get_from_name(d_net_params['type'])
+    logger.info(f"Generator type:     {g_net_params['type']}, key: {g_net_type}")
+    logger.info(f"Discriminator type: {d_net_params['type']}, key: {d_net_type}")
+    # create generator network
+    if ModelType.DENSENET == g_net_type:
+        g_net = MLPModelMultIn(
+            (params['data']['num_features'][1], params['data']['latent_dim']), # input_size
+            params['data']['num_labels'],                                      # output_size
+            hidden_layers_sizes=g_net_params['dense_layer_sizes'],
+            hidden_layers_activation=_get_activation(g_net_params['activation_fn']),
+            output_layer_activation=nn.Sigmoid(),
+            use_dropout=g_net_params['dropout']
+        )
+#   elif ModelType.CONVNET == g_net_type:
+#       TODO
+#   elif ModelType.TRANSFORMERNET == g_net_type:
+#       TODO
+    else:
+        raise NotImplementedError()
+    # create discriminator network
+    if ModelType.DENSENET == d_net_type:
+        d_net = MLPModelMultIn(
+            (params['data']['num_features'][1], params['data']['num_labels']), # input_size
+            1,                                                                 # output_size
+            hidden_layers_sizes=d_net_params['dense_layer_sizes'],
+            hidden_layers_activation=_get_activation(d_net_params['activation_fn']),
+            use_dropout=g_net_params['dropout']
+        )
+#   elif ModelType.CONVNET == g_net_type:
+#       TODO
+#   elif ModelType.TRANSFORMERNET == g_net_type:
+#       TODO
+    else:
+        raise NotImplementedError()
+    # return networks
+    return g_net, d_net
 
 ### OLD:
 

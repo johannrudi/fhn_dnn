@@ -1,5 +1,5 @@
 """
-Handling of Data
+Handling of data.
 """
 
 import numpy as np
@@ -8,9 +8,9 @@ import os, pathlib, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import ModeKeys
 
+###############################################################################
 
-def load_data(params):
-    enable_verbose = params['runconfig']['verbose']
+def load_data(params, logger):
     data_params    = params['data']
     data_type      = params['data']['data_type'].casefold()
 
@@ -24,11 +24,9 @@ def load_data(params):
     elif 'RATE'.casefold() == data_type:
         rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
         rate = np.expand_dims(rate, axis=1)
-        features = np.where(np.isnan(rate), 0.0, rate)  # set nan values to zero
     elif 'RATE_DURATION'.casefold() == data_type:
         rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
         rate = np.expand_dims(rate, axis=1)
-        rate = np.where(np.isnan(rate), 0.0, rate)  # set nan values to zero
         duration = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
         duration = np.expand_dims(duration, axis=1)
         features = np.concatenate([rate, duration], axis=1)
@@ -45,11 +43,10 @@ def load_data(params):
     labels = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
 
     # print info
-    if enable_verbose:
-        print('[load_data]', 'features shape:', features.shape, '- dtype:', features.dtype)
-        print('[load_data]', 'labels shape:  ', labels.shape,   '- dtype:', labels.dtype)
-        if features_noise is not None:
-            print('[load_data]', 'features_noise shape:', features_noise.shape, '- dtype:', features_noise.dtype)
+    logger.info(f"features shape:       {features.shape}, dtype: {features.dtype}")
+    logger.info(f"labels shape:         {labels.shape}, dtype: {labels.dtype}")
+    if features_noise is not None:
+        logger.info(f"features_noise shape: {features_noise.shape}, dtype: {features_noise.dtype}")
     assert labels.shape[0] == features.shape[0]
     assert features_noise is None or features_noise.shape == features.shape
 
@@ -60,19 +57,13 @@ def load_data(params):
             assert 2 == features_noise.ndim
             features_noise = np.expand_dims(features_noise, axis=1)
 
-    # set dimensions
-    params['model']['num_features'] = features.shape[1:]
-    params['model']['num_labels']   = labels.shape[1]
-
     # set sizes
     Ns = features.shape[0]
-    if enable_verbose:
-        print('[load_data]', 'Ns:', Ns)
-        print('[load_data]', 'Ntrain:   ', data_params['Ntrain'])
-        print('[load_data]', 'Nvalidate:', data_params['Nvalidate'])
-        print('[load_data]', 'Ntest:    ', data_params['Ntest'])
+    logger.info(f"Ns:        {Ns}")
+    logger.info(f"Ntrain:    {data_params['Ntrain']}")
+    logger.info(f"Nvalidate: {data_params['Nvalidate']}")
+    logger.info(f"Ntest:     {data_params['Ntest']}")
     assert (data_params['Ntrain'] + data_params['Nvalidate'] + data_params['Ntest']) <= Ns
-    assert data_params['Nvalidate'] == 0, 'no validation for now' #TODO
 
     # split data into training and testing sets
     features_train    = features[:data_params['Ntrain'],...]
@@ -81,10 +72,19 @@ def load_data(params):
     labels_validate   = labels  [data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
     features_test     = features[-data_params['Ntest']:,...]
     labels_test       = labels  [-data_params['Ntest']:,...]
+    logger.info(f"features_train_shape:    {features_train.shape}")
+    logger.info(f"features_validate_shape: {features_validate.shape}")
+    logger.info(f"features_test_shape:     {features_test.shape}")
+    logger.info(f"labels_train_shape:      {labels_train.shape}")
+    logger.info(f"labels_validate_shape:   {labels_validate.shape}")
+    logger.info(f"labels_test_shape:       {labels_test.shape}")
     if features_noise is not None:
         features_noise_train    = features_noise[:data_params['Ntrain'],...]
         features_noise_validate = features_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
         features_noise_test     = features_noise[-data_params['Ntest']:,...]
+        logger.info(f"features_noise_train shape:    {features_noise_train.shape}")
+        logger.info(f"features_noise_validate shape: {features_noise_validate.shape}")
+        logger.info(f"features_noise_test shape:     {features_noise_test.shape}")
     else:
         features_noise_train    = None
         features_noise_validate = None
@@ -96,16 +96,46 @@ def load_data(params):
 #       features_validate += features_noise_validate
 #       features_test     += features_noise_test
 
-    return features_train, features_validate, features_test, \
-           labels_train,   labels_validate,   labels_test, \
-           features_noise_train, features_noise_validate, features_noise_test
+    # set dimensions
+    params['data']['num_features'] = features.shape[1:]
+    params['data']['num_labels']   = labels.shape[1]
+    logger.debug(f"num_features: {params['data']['num_features']}")
+    logger.debug(f"num_labels:   {params['data']['num_labels']}")
 
-def _preprocess_apply_scale(arrays, scale):
-    for a in arrays:
-        np.add(a, -scale['shift'], out=a)
-        np.multiply(a, 1.0/scale['mult'], out=a)
+    # bundle arrays
+    features = {
+        'train':    features_train,
+        'validate': features_validate,
+        'test':     features_test,
+    }
+    labels = {
+        'train':    labels_train,
+        'validate': labels_validate,
+        'test':     labels_test,
+    }
+    if features_noise_train is not None and \
+       features_noise_validate is not None and \
+       features_noise_test is not None:
+        features_noise = {
+            'train':    features_noise_train,
+            'validate': features_noise_validate,
+            'test':     features_noise_test,
+        }
+    else:
+        features_noise = {
+            'train':    None,
+            'validate': None,
+            'test':     None,
+        }
 
-def preprocess_features(features_train, features_test, params):
+    return features, labels, features_noise
+
+def _preprocess_apply_scale(data_dict, scale):
+    for key in data_dict.keys():
+        np.add(     data_dict[key], -scale['shift'],   out=data_dict[key])
+        np.multiply(data_dict[key], 1.0/scale['mult'], out=data_dict[key])
+
+def preprocess_features(features: dict, params, logger):
     data_type = params['data']['data_type'].casefold()
     # calculate min and max
     if 'TIME'.casefold()       == data_type or \
@@ -114,38 +144,156 @@ def preprocess_features(features_train, features_test, params):
         scale = {'shift': 0.0, 'mult': 1.0}
     elif 'RATE'.casefold()          == data_type or \
          'RATE_DURATION'.casefold() == data_type:
-        features_min = np.zeros((1,features_train.shape[1]))
-        features_max = np.expand_dims(np.amax(features_train, axis=0), axis=0)
+        assert 3 == features['train'].ndim
+        assert 1 == features['train'].shape[1]
+        features_min = np.nanmin(features['train'], axis=0, keepdims=True)
+        features_max = np.nanmax(features['train'], axis=0, keepdims=True)
+        features_std = np.nanstd(features['train'], axis=0, keepdims=True)
+        features_med = np.nanmedian(features['train'], axis=0, keepdims=True)
+        # adjust if max seems too large
+        lg_idx_ = (features_med < (features_max - 2.0*features_std)).flatten()
+        lg_val_ = (features_max - features_std).flatten()
+        for i in range(len(lg_idx_)):
+            data_ = features['train'][...,i]
+            data_ = data_[data_ < lg_val_[i]]
+            features_max[...,i] = np.nanmax(data_, axis=0)
+        # set scale
         scale = {'shift': features_min, 'mult': (features_max - features_min)}
     else:
         raise ValueError('Unknown parameter for data->data_type')
     # apply scaling
-    _preprocess_apply_scale((features_train, features_test), scale)
+    logger.info(f"features scale: {scale}")
+    _preprocess_apply_scale(features, scale)
+    # replace nan values
+    if 'TIME'.casefold()       == data_type or \
+       'TIME_NOISE'.casefold() == data_type:
+       pass
+    elif 'RATE'.casefold()          == data_type or \
+         'RATE_DURATION'.casefold() == data_type:
+        for key in features.keys():
+            features[key] = np.where(np.isnan(features[key]), -1.0, features[key])
+    else:
+        raise ValueError('Unknown parameter for data->data_type')
     # return scale
     return scale
 
-def preprocess_features_noise(features_noise_train, features_noise_test, scale):
-    if features_noise_train is not None and features_noise_test is not None:
+def preprocess_features_noise(features_noise, scale):
+    if features_noise['train'] is not None and \
+       features_noise['validate'] is not None and \
+       features_noise['test'] is not None:
         # apply scaling
-        _preprocess_apply_scale((features_noise_train, features_noise_test), scale)
+        _preprocess_apply_scale(features_noise, scale)
 
-def preprocess_labels(labels_train, labels_test, params):
-    labels_min = np.expand_dims(np.amin(labels_train, axis=0), axis=0)
-    labels_max = np.expand_dims(np.amax(labels_train, axis=0), axis=0)
+def preprocess_labels(labels: dict, params, logger):
+    labels_min = np.min(labels['train'], axis=0, keepdims=True)
+    labels_max = np.max(labels['train'], axis=0, keepdims=True)
     scale = {'shift': labels_min, 'mult': (labels_max - labels_min)}
     # apply scaling
-    _preprocess_apply_scale((labels_train, labels_test), scale)
+    logger.info(f"labels scale: {scale}")
+    _preprocess_apply_scale(labels, scale)
     # return scale
     return scale
 
-def _postprocess_apply_scale(arrays, scale):
-    for a in arrays:
-        np.multiply(a, scale['mult'], out=a)
-        np.add(a, scale['shift'], out=a)
+def _postprocess_apply_scale(data_dict, scale):
+    for key in data_dict.keys():
+        np.multiply(data_dict[key], scale['mult'],  out=data_dict[key])
+        np.add(     data_dict[key], scale['shift'], out=data_dict[key])
 
-def postprocess_labels(labels_train_predict, labels_test_predict, scale):
+def postprocess_labels(labels_predict, scale):
     # apply scaling
-    _postprocess_apply_scale((labels_train_predict, labels_test_predict), scale)
+    _postprocess_apply_scale(labels_predict, scale)
+
+###############################################################################
+
+def _get_positions_from_histogram(data, range, n_bins, relevant_bins_threshold):
+    hist, bin_edges = np.histogram(data.flatten(), range=range, bins=n_bins)
+    relevant_bin_indices = hist > relevant_bins_threshold
+    relevant_bin_edges   = (bin_edges[:-1])[relevant_bin_indices]
+    n_relevant_bins      = np.sum(relevant_bin_indices)
+    if 10 < n_relevant_bins:
+        cond_positions = np.linspace(relevant_bin_edges[0], relevant_bin_edges[-1], 5)
+    else:
+        cond_positions = relevant_bin_edges
+    return cond_positions
+
+def get_conditional_positions(features: np.ndarray, params):
+    data_type = params['data']['data_type'].casefold()
+    # set function parameters
+    fn_params = {
+        'n_bins': {
+            'TIME':     None,
+            'RATE':     2000,
+            'DURATION':  200,
+        },
+        'range': {
+            'TIME':     None,
+            'RATE':     [0.0, 2.0],
+            'DURATION': [0.0, 2.0],
+        },
+        'relevant_bins_threshold': {
+            'TIME':     None,
+            'RATE':     features.shape[0] * 0.04,
+            'DURATION': features.shape[0] * 0.04,
+        }
+    }
+    # extract conditional positions
+    assert 1 < features.shape[0]
+    cond_positions = list()
+    if 'TIME'.casefold()       == data_type or \
+       'TIME_NOISE'.casefold() == data_type:
+        raise NotImplementedError()
+    elif 'RATE'.casefold()          == data_type:
+        i = 0
+        key = 'RATE'
+        cond_positions.append(_get_positions_from_histogram(
+                features[...,i],
+                fn_params['range'][key],
+                fn_params['n_bins'][key],
+                fn_params['relevant_bins_threshold'][key]
+        ))
+    elif 'RATE_DURATION'.casefold() == data_type:
+        for i, key in enumerate(['RATE', 'DURATION']):
+            cond_positions.append(_get_positions_from_histogram(
+                    features[...,i],
+                    fn_params['range'][key],
+                    fn_params['n_bins'][key],
+                    fn_params['relevant_bins_threshold'][key]
+            ))
+    else:
+        raise ValueError('Unknown parameter for data->data_type')
+    return cond_positions
+
+def _filter_samples(features, targets, position, threshold):
+    for i, (pos, thresh) in enumerate(zip(position, threshold)):
+        features_ = features[...,i].flatten()
+        idx_thresh = np.logical_and((pos - thresh) < features_, features_ < (pos + thresh))
+        if 0 == i:
+            indices = idx_thresh
+        else:
+            indices = np.logical_and(indices, idx_thresh)
+    features_filtered = features[indices]
+    if 2 == targets.ndim:
+        targets_filtered = targets[indices]
+    elif 3 == targets.ndim:
+        targets_filtered = targets[:,indices,...]
+    else:
+        raise NotImplementedError(f"targets.ndim={targets.ndim}")
+    return features_filtered, targets_filtered
+
+def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position, params):
+    data_type = params['data']['data_type'].casefold()
+    # extract conditional samples
+    assert 1 < features.shape[0]
+    if 'TIME'.casefold()       == data_type or \
+       'TIME_NOISE'.casefold() == data_type:
+        raise NotImplementedError()
+    elif 'RATE'.casefold()          == data_type or \
+         'RATE_DURATION'.casefold() == data_type:
+        threshold = [0.05, 0.03]
+        features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
+    else:
+        raise ValueError('Unknown parameter for data->data_type')
+    return features_cond, targets_cond
 
 ###############################################################################
 
@@ -153,7 +301,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 class FHN_Dataset(Dataset):
-    def __init__(self, features, targets, features_noise=None):
+    def __init__(self, features, targets, features_noise=None, item_return_order='yx'):
         super().__init__()
         self.features = torch.from_numpy(features)
         self.targets  = torch.from_numpy(targets)
@@ -162,6 +310,7 @@ class FHN_Dataset(Dataset):
             self.features_noise = torch.from_numpy(features_noise)
         else:
             self.features_noise = None
+        self.item_return_order = item_return_order.casefold()
 
     def __len__(self):
         return self.features.size(0)
@@ -175,36 +324,44 @@ class FHN_Dataset(Dataset):
             features = self.features[idx] + self.features_noise[noise_idx]
         else:
             features = self.features[idx]
-        targets  = self.targets[idx]
+        targets = self.targets[idx]
 
-        return (features, targets)
+        if 'xy'.casefold() == self.item_return_order:
+            sample = (targets, features)
+        elif 'yx'.casefold() == self.item_return_order:
+            sample = (features, targets)
+        else:
+            raise ValueError(f"Unknown item return order: {self.item_return_order}")
+        return sample
 
 
-def create_dataloader(params, mode, features, targets,
+def create_dataloader(params, logger, mode, features, targets,
                       features_noise={'train':None, 'validate':None, 'test':None, },
-                      kwargs={'shuffle':True, 'drop_last':False}):
+                      item_return_order='yx',
+                      dataloader_kwargs={'shuffle':True, 'drop_last':False}):
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
     enable_training = (mode == ModeKeys.TRAIN)
-    enable_verbose  = params['runconfig']['verbose']
     if enable_training:
         batch_size = params['data']['train_batch_size']
     else:
         batch_size = params['data']['eval_batch_size']
 
     # create the dataset
-    if enable_verbose: print('[create_dataloader]', 'Create new dataset')
+    logger.info('Create new dataset')
     if enable_training:
         dataset = FHN_Dataset(features['train'], targets['train'],
-                              features_noise=features_noise['train'])
+                              features_noise=features_noise['train'],
+                              item_return_order=item_return_order)
     else:
         dataset = FHN_Dataset(features['test'], targets['test'],
-                              features_noise=features_noise['test'])
+                              features_noise=features_noise['test'],
+                              item_return_order=item_return_order)
 
     # create the dataloader
-    if enable_verbose: print('[create_dataloader]', 'Create new dataloader')
-    dataloader = DataLoader(dataset, batch_size=batch_size, **kwargs)
+    logger.info('Create new dataloader')
+    dataloader = DataLoader(dataset, batch_size=batch_size, **dataloader_kwargs)
 
     # output
     return dataloader

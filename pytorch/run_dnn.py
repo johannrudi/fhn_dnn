@@ -1,252 +1,213 @@
 """
-Run Script
+Run training and evaluation of DNN-based inverse map.
 """
 
-import argparse, os, pprint, timeit, sys
+import argparse, os, pprint, random, sys, timeit
 import numpy as np
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch
-#from torch.utils.tensorboard import SummaryWriter #TODO derprecated
+#from torch.utils.tensorboard import SummaryWriter #TODO deprecated
 
-###DEV###
+###DEV
 sys.path.append('/Users/jrudi/code/dl-kit')
 from dlkit.log.log_util import (logging_set_up, logging_get_logger)
 from dlkit.opt.train import train_epochs
+###/DEV
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
-from utils import (ModeKeys, ModelType, load_parameters, save_parameters, update_parameters_from_args)
+from utils import (
+    ModeKeys,
+    ModelType,
+    load_parameters,
+    save_parameters,
+    update_parameters_from_args
+)
+from data import (
+    load_data,
+    preprocess_features,
+    preprocess_features_noise,
+    preprocess_labels,
+    postprocess_labels,
+    create_dataloader
+)
+from net import create_dnn
 
-from data import (load_data, preprocess_features, preprocess_features_noise, preprocess_labels, postprocess_labels, create_dataloader)
-from model import (create_denseNet, create_convNet, create_transformerNet)
+###############################################################################
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ^TODO review usage of device variable
+
 def run(args, params):
-    _prefix          = '[run_dnn]'
-    mode_name        = params['runconfig']['mode']
-    model_type_name  = params['model']['model_type']
-    enable_verbose   = params['runconfig']['verbose']
+    # get parameters
+    mode_name     = params['runconfig']['mode']
+    enable_debug  = params['runconfig']['debug']
 
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
-    mode = ModeKeys.get_from_name(mode_name)
-    model_type = ModelType.get_from_name(model_type_name)
+    mode     = ModeKeys.get_from_name(mode_name)
+
+    # set up logging
+    logging_set_up( os.path.join(self_dir, params['runconfig']['model_dir'], 'run_dnn') )
+    logger = logging_get_logger('run_dnn')
+
+    # print environment
+    logger.info(f"Environment - Directory:       {self_dir}")
+    logger.info(f"Environment - PyTorch version: {torch.__version__}")
+    logger.info(f"Environment - Seed:            {params['data']['random_seed']}")
+    logger.info(f"Environment - Mode name:       {mode_name}, key: {mode}")
+
+    # print parameters
+    if enable_debug:
+        print('<parameters>')
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(params)
+        print('</parameters>')
 
     # fix random seed for reproducibility
     if 'random_seed' in params['data'] and params['data']['random_seed'] is not None:
+        random.seed(params['data']['random_seed'])
         np.random.seed(params['data']['random_seed'])
         torch.manual_seed(params['data']['random_seed'])
     else:
         params['data']['random_seed'] = None
-
-    # print environment
-    print(_prefix, 'Environment')
-    print(_prefix, '- Directory:         ', self_dir)
-    print(_prefix, '- PyTorch version:   ', torch.__version__)
-    print(_prefix, '- Mode name ; key:   ', mode_name, ';', mode)
-    print(_prefix, '- Model type ; key:  ', model_type_name, ';', model_type)
-    print(_prefix, '- Seed:              ', params['data']['random_seed'])
-
-    # print parameters
-    if enable_verbose:
-        print(_prefix, 'Parameters')
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(params)
 
     # initialize timers
     time_train = 0.0
     time_eval  = 0.0
 
     #
-    # Data & Model
+    # Data
     #
 
     # load data
-    features_train, features_validate, features_test, \
-    labels_train,   labels_validate,   labels_test,   \
-    features_noise_train, features_noise_validate, features_noise_test = load_data(params)
+    features, targets, features_noise = load_data(params, logging_get_logger('load_data'))
 
     # preprocess data
-    features_scale = preprocess_features(features_train, features_test, params)
-    labels_scale   = preprocess_labels  (labels_train,   labels_test,   params)
-    preprocess_features_noise(features_noise_train, features_noise_test, features_scale)
-
-    # print info about data
-    logging_set_up( os.path.join(self_dir, params['runconfig']['model_dir'], _prefix.strip('[]')) )
-    logger = logging_get_logger(_prefix)
-    logger.info('features_train shape: {}'.format(features_train.shape))
-    logger.info('features_test shape:  {}'.format(features_test.shape))
-    logger.info('num_features:         {}'.format(params['model']['num_features']))
-    logger.info('features scale:       {}'.format(features_scale))
-    logger.info('labels_train shape:   {}'.format(labels_train.shape))
-    logger.info('labels_test shape:    {}'.format(labels_test.shape))
-    logger.info('num_labels:           {}'.format(params['model']['num_labels']))
-    logger.info('labels scale:         {}'.format(labels_scale))
-    if features_noise_train is not None and features_noise_test is not None:
-        logger.info('features_noise_train shape: {}'.format(features_train.shape))
-        logger.info('features_noise_test shape:  {}'.format(features_test.shape))
-
-    # bundle arrays
-    features = {
-        'train':    features_train,
-        'validate': features_validate,
-        'test':     features_test,
-    }
-    targets = {
-        'train':    labels_train,
-        'validate': labels_validate,
-        'test':     labels_test,
-    }
-    if features_noise_train is not None and \
-       features_noise_validate is not None and \
-       features_noise_test is not None:
-        features_noise = {
-            'train':    features_noise_train,
-            'validate': features_noise_validate,
-            'test':     features_noise_test,
-        }
-    else:
-        features_noise = {
-            'train':    None,
-            'validate': None,
-            'test':     None,
-        }
+    features_scale = preprocess_features(features, params, logging_get_logger('preprocess_features'))
+    targets_scale  = preprocess_labels  (targets,  params, logging_get_logger('preprocess_labels'))
+    preprocess_features_noise(features_noise, features_scale)
 
     # create dataloader
-    dataloader = create_dataloader(params, mode, features, targets, features_noise=features_noise)
+    dataloader = create_dataloader(params, logging_get_logger('create_dataloader'), mode,
+                                   features, targets, features_noise=features_noise,
+                                   item_return_order='yx')
 
-    # create model
-    if ModelType.DENSENET == model_type:
-        model = create_denseNet(params)
-    elif ModelType.CONVNET == model_type:
-        model = create_convNet(params)
-    elif ModelType.TRANSFORMERNET == model_type:
-        model = create_transformerNet(params)
-    else:
-        raise NotImplementedError()
-    print(_prefix, 'Model summary')
-    print(model)
+    #
+    # Network
+    #
 
-    # load model weights
+    # create network
+    net_logger = logging_get_logger('create_network')
+    net = create_dnn(params, net_logger)
+    print('<network>')
+    print(net)
+    print('</network>')
+
+    # load network weights
     if params['runconfig']['model_load']:
         model_path = os.path.join(self_dir, params['runconfig']['model_load'])
-        model.load_state_dict(torch.load(model_path))
+        net.load_state_dict(torch.load(model_path))
 
     #
     # Training
     #
 
     if ModeKeys.TRAIN == mode:
-        print(_prefix, 'Train')
+        print('<train>')
 
-        # create optimizer and loss function
-        optimizer = torch.optim.Adam(model.parameters(), lr=params['optimizer']['learning_rate'],
+        # create optimizer
+        optimizer = torch.optim.Adam(net.parameters(), lr=params['optimizer']['learning_rate'],
                                      betas=(params['optimizer']['beta1'], params['optimizer']['beta2']),
                                      eps=params['optimizer']['epsilon'])
+
+        # set loss function
         loss_fn = torch.nn.MSELoss()
 
-        # create a callback that saves the model's weights
+        # checkpointing for saving network weights
         checkpoint_dir    = os.path.join(self_dir, params['runconfig']['model_dir'], 'checkpoints')
         checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
         #checkpoint_callback = SummaryWriter(log_dir=checkpoint_path, #save_steps=checkpoint_epochs, flush_secs=1)
+        #^TODO callback unused
 
         # train network
-        train_log = train_epochs(
-                params['training']['epochs'], model, dataloader, optimizer, loss_fn,
+        epoch_dlog = train_epochs(
+                params['training']['epochs'], net, dataloader, optimizer, loss_fn,
                 device=device, logger=logger, checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir
         )
-        time_train = train_log['time_train']
-#        time_train = timeit.default_timer()
-#        for epoch in tqdm(range(params['training']['epochs'])):
-#            for i, data in enumerate(dataloader):
-#                # set model to training mode
-#                model.train()
+        time_train = epoch_dlog['time_train']
 
-#                # get input and target tensors
-#                inputs, targets = data
-#                inputs = inputs.to(device)
-#                targets = targets.to(device)
-
-#                # zero the gradients
-#                optimizer.zero_grad()
-#                # forward pass
-#                outputs = model(inputs)
-
-#                # calculate loss and backward pass
-#                loss = loss_fn(outputs, targets)
-#                loss.backward()
-
-#                # update model parameters
-#                optimizer.step()
-
-#                # log metrics
-#                if i % params['runconfig']['log_steps'] == 0:
-#                    checkpoint_callback.add_scalar('loss', loss.item(), i + epoch * (
-#                                params['data']['Ntrain'] // params['data']['train_batch_size']))
-#        time_train = timeit.default_timer() - time_train
+        print('</train>')
 
     #
     # Evaluation
     #
 
-    print(_prefix, 'Evaluate')
+    print('<evaluate>')
 
     # create dataloader
-    dataloader_eval_train = create_dataloader(params, ModeKeys.TRAIN, features, targets,
-                                              features_noise=features_noise,
-                                              kwargs={'shuffle':False, 'drop_last':False})
-    dataloader_eval_test  = create_dataloader(params, ModeKeys.EVAL, features, targets,
-                                              features_noise=features_noise,
-                                              kwargs={'shuffle':False, 'drop_last':False})
+    dataloader_eval_train = create_dataloader(params, logging_get_logger('create_dataloader'), ModeKeys.TRAIN,
+                                              features, targets, features_noise=features_noise,
+                                              item_return_order='yx',
+                                              dataloader_kwargs={'shuffle':False, 'drop_last':False})
+    dataloader_eval_test  = create_dataloader(params, logging_get_logger('create_dataloader'), ModeKeys.EVAL,
+                                              features, targets, features_noise=features_noise,
+                                              item_return_order='yx',
+                                              dataloader_kwargs={'shuffle':False, 'drop_last':False})
 
     # compute predictions
     time_eval = timeit.default_timer()
-    labels_train_predict, labels_test_predict = evaluate(model, dataloader_eval_train, dataloader_eval_test, params)
+    targets_predict = evaluate(net, dataloader_eval_train, dataloader_eval_test, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
-    postprocess_labels(labels_train,         labels_test,         labels_scale)
-    postprocess_labels(labels_train_predict, labels_test_predict, labels_scale)
+    postprocess_labels(targets, targets_scale)
+    postprocess_labels(targets_predict, targets_scale)
 
     # compute evaluation metrics
-    r2_train = [metrics.r2_score(labels_train[:,i], labels_train_predict[:,i]) for i in range(labels_train.shape[1])]
-    r2_test  = [metrics.r2_score(labels_test[:,i], labels_test_predict[:,i]) for i in range(labels_test.shape[1])]
-    r2_train_all = metrics.r2_score(labels_train, labels_train_predict)
-    r2_test_all  = metrics.r2_score(labels_test, labels_test_predict)
+    r2_train = [metrics.r2_score(targets['train'][:,i], targets_predict['train'][:,i]) for i in range(targets['train'].shape[1])]
+    r2_test  = [metrics.r2_score(targets['test'][:,i], targets_predict['test'][:,i]) for i in range(targets['test'].shape[1])]
+    r2_train_all = metrics.r2_score(targets['train'], targets_predict['train'])
+    r2_test_all  = metrics.r2_score(targets['test'], targets_predict['test'])
 
     # print metrics
-    print(_prefix, 'Evaluate')
-    print(_prefix, '- R2 score (train):', r2_train, r2_train_all)
-    print(_prefix, '- R2 score (eval): ', r2_test,  r2_test_all)
+    logger.info('Evaluate - R2 score (train): ' + str(r2_train) + f" {r2_train_all}")
+    logger.info('Evaluate - R2 score (eval):  ' + str(r2_test)  + f" {r2_test_all}")
+
+    print('</evaluate>')
+
+    #
+    # Output
+    #
 
     # print runtimes
-    print(_prefix, 'Runtime [sec]')
-    print(_prefix, '- train:', time_train)
-    print(_prefix, '- eval: ', time_eval)
-    print(_prefix, 'Runtime statistics')
+    logger.info(f"Runtime - train [sec]: {time_train}")
+    logger.info(f"Runtime - eval [sec]:  {time_eval}")
     if 0 < time_train:
         n_epoch   = params['training']['epochs']
         n_steps   = params['training']['epochs'] * (params['data']['Ntrain']//params['data']['train_batch_size'])
         n_samples = params['data']['train_batch_size']
-        print(_prefix, '- train - #epochs:         ', n_epoch)
-        print(_prefix, '- train - #steps:          ', n_steps)
-        print(_prefix, '- train - #samples (total):', n_steps*n_samples)
-        print(_prefix, '- train - avg. steps/sec:  ', n_steps/time_train)
-        print(_prefix, '- train - avg. samples/sec:', n_steps*n_samples/time_train)
+        logger.info(f"Runtime statistics - train - #epochs:          {n_epoch}")
+        logger.info(f"Runtime statistics - train - #steps:           {n_steps}")
+        logger.info(f"Runtime statistics - train - #samples (total): {n_steps*n_samples}")
+        logger.info(f"Runtime statistics - train - avg. steps/sec:   {n_steps/time_train}")
+        logger.info(f"Runtime statistics - train - avg. samples/sec: {n_steps*n_samples/time_train}")
     if 0 < time_eval:
         n_samples = (params['data']['Ntest']//params['data']['eval_batch_size']) * params['data']['eval_batch_size']
-        print(_prefix, '- eval  - #samples:        ', n_samples)
-        print(_prefix, '- eval  - avg. samples/sec:', n_samples/time_eval)
+        logger.info(f"Runtime statistics - eval  - #samples:         {n_samples}")
+        logger.info(f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}")
+
+    # plot losses
+    #TODO
 
     # plot true training values vs. predictions
-    n_plot_cols = labels_train.shape[1]
+    n_plot_cols = targets['train'].shape[1]
     fig, ax = plt.subplots(1, 2, figsize=(12,3))
     for i in range(n_plot_cols):
-        ymin = np.amin(labels_train[:,i])
-        ymax = np.amax(labels_train[:,i])
-        ax[i].scatter(labels_train[:,i], labels_train_predict[:,i], s=4**2, alpha=0.5)
+        ymin = np.amin(targets['train'][:,i])
+        ymax = np.amax(targets['train'][:,i])
+        ax[i].scatter(targets['train'][:,i], targets_predict['train'][:,i], s=4**2, alpha=0.5)
         ax[i].plot([ymin, ymax], [ymin, ymax], linewidth=3, linestyle='--', color='orange')
         ax[i].set_xlabel('train value')
         ax[i].set_ylabel('predicted value')
@@ -255,12 +216,12 @@ def run(args, params):
     fig.tight_layout()
 
     # plot true testing values vs. predictions
-    n_plot_cols = labels_test.shape[1]
+    n_plot_cols = targets['test'].shape[1]
     fig, ax = plt.subplots(1, 2, figsize=(12,3))
     for i in range(n_plot_cols):
-        ymin = np.amin(labels_test[:,i])
-        ymax = np.amax(labels_test[:,i])
-        ax[i].scatter(labels_test[:,i], labels_test_predict[:,i], s=4**2, alpha=0.5)
+        ymin = np.amin(targets['test'][:,i])
+        ymax = np.amax(targets['test'][:,i])
+        ax[i].scatter(targets['test'][:,i], targets_predict['test'][:,i], s=4**2, alpha=0.5)
         ax[i].plot([ymin, ymax], [ymin, ymax], linewidth=3, linestyle='--', color='orange')
         ax[i].set_xlabel('test value')
         ax[i].set_ylabel('predicted value')
@@ -272,30 +233,30 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(model, dataloader_eval_train, dataloader_eval_test, params):
-    model = model.to(device)
-    model.eval()
-
+def evaluate(net, dataloader_eval_train, dataloader_eval_test, params):
+    net = net.to(device)
+    net.eval()
+    # evaluate network predictions
     with torch.no_grad():
         predict_list = list()
         for data in dataloader_eval_train:
             features, targets = data
             features = features.to(device)
             targets  = targets.to(device)
-            predict_tensor = model(features)
+            predict_tensor = net(features)
             predict_list.append(predict_tensor.cpu().numpy())
-        labels_train_predict = np.concatenate(predict_list, axis=0)
+        targets_train_predict = np.concatenate(predict_list, axis=0)
 
         predict_list = list()
         for data in dataloader_eval_test:
             features, targets = data
             features = features.to(device)
             targets  = targets.to(device)
-            predict_tensor = model(features)
+            predict_tensor = net(features)
             predict_list.append(predict_tensor.cpu().numpy())
-        labels_test_predict = np.concatenate(predict_list, axis=0)
-
-    return labels_train_predict, labels_test_predict
+        targets_test_predict = np.concatenate(predict_list, axis=0)
+    # return predictions
+    return {'train': targets_train_predict, 'test': targets_test_predict}
 
 ###############################################################################
 
@@ -309,8 +270,8 @@ def create_arg_parser():
     parser.add_argument(
         "-p",
         "--params",
-        default='./configs/params.yaml',
-        help="Path to .yaml file with model parameters",
+        default='./configs/params_dnn.yaml',
+        help="Path to .yaml file with parameters",
     )
     parser.add_argument(
         "-m",
