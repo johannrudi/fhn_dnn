@@ -22,8 +22,9 @@ from utils import (
     load_parameters,
     save_parameters,
     update_parameters_from_args,
-    save_loss,
-    save_data_vs_predict
+    plot_loss,
+    plot_data_vs_predict,
+    plot_data_vs_predict_error
 )
 from data import (
     load_data,
@@ -50,7 +51,7 @@ def run(args, params):
     mode     = ModeKeys.get_from_name(mode_name)
 
     # set up logging
-    logging_set_up( os.path.join(self_dir, params['runconfig']['model_dir'], 'run_dnn') )
+    logging_set_up( os.path.join(self_dir, params['runconfig']['save_dir'], 'run_dnn') )
     logger = logging_get_logger('run_dnn')
 
     # print environment
@@ -107,9 +108,9 @@ def run(args, params):
     print('</network>')
 
     # load network weights
-    if params['runconfig']['model_load']:
-        model_path = os.path.join(self_dir, params['runconfig']['model_load'])
-        net.load_state_dict(torch.load(model_path))
+    if params['runconfig']['load_dir']:
+        net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
+        net.load_state_dict(torch.load(net_path))
 
     #
     # Training
@@ -127,7 +128,7 @@ def run(args, params):
         loss_fn = torch.nn.MSELoss()
 
         # checkpointing for saving network weights
-        checkpoint_dir    = os.path.join(self_dir, params['runconfig']['model_dir'], 'checkpoints')
+        checkpoint_dir    = os.path.join(self_dir, params['runconfig']['save_dir'], 'checkpoints')
         checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
         #checkpoint_callback = SummaryWriter(log_dir=checkpoint_path, #save_steps=checkpoint_epochs, flush_secs=1)
         #^TODO callback unused
@@ -200,30 +201,39 @@ def run(args, params):
         logger.info(f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}")
 
     # plot loss
-    path = os.path.join(self_dir, params['runconfig']['model_dir'], 'loss')
-    save_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
+    path = os.path.join(self_dir, params['runconfig']['save_dir'], 'loss')
+    plot_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
               loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
 
-    # plot true values vs. predictions
+    # plot predictions
     for key in ['train', 'validate', 'test']:
         if params['data']['N'+key] <= 0:
             continue
         n_targets            = targets[key].shape[-1]
         targets_plot         = [targets[key][:,i]         for i in range(n_targets)]
         targets_predict_plot = [targets_predict[key][:,i] for i in range(n_targets)]
-        path = os.path.join(self_dir, params['runconfig']['model_dir'], 'data_vs_predict_'+key)
-        save_data_vs_predict(targets_plot, targets_predict_plot, path,
-                             plot_name=[f"theta_{i}" for i in range(n_targets)],
-                             x_label=n_targets*[f"{key} value"],
-                             y_label=n_targets*[f"predicted value"])
+        # plot true values vs. predictions
+        path = os.path.join(self_dir, params['runconfig']['save_dir'], 'data_vs_predict_'+key)
+        plot_data_vs_predict(
+                targets_plot, targets_predict_plot, path,
+                plot_name=[f"theta_{i}" for i in range(n_targets)],
+                x_label=n_targets*[f"{key} value"],
+                y_label=n_targets*[f"predicted value"])
+        # plot prediction errors
+        path = os.path.join(self_dir, params['runconfig']['save_dir'], 'predict_error_'+key)
+        plot_data_vs_predict_error(
+                targets_plot, targets_predict_plot, path,
+                plot_name=[f"theta_{i}" for i in range(n_targets)],
+                x_label=n_targets*[f"{key} value"],
+                y_label=n_targets*[f"prediction error"])
 
     # show plots
-    plt.show()
+    if params['runconfig']['show_plots']:
+        plt.show()
 
 ###############################################################################
 
 def evaluate(net, dataloader_eval, params):
-    net = net.to(device)
     net.eval()
     # evaluate network predictions
     targets_predict = dict()
@@ -274,7 +284,7 @@ def main():
     # load parameters, and save them for reproducibility
     params = load_parameters(args.params)
     update_parameters_from_args(params['runconfig'], args)
-    save_parameters(params, model_dir=params['runconfig']['model_dir'])
+    save_parameters(params, save_dir=params['runconfig']['save_dir'])
     # run script
     run(args, params)
 

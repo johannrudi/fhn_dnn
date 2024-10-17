@@ -36,8 +36,9 @@ training:
 
 runconfig:
     mode: 'TRAIN'
-    model_load: #'runs/dnn_dir'
-    model_dir:  'runs/dnn_dir'
+    load_dir: #'runs/dnn_dir'
+    save_dir:  'runs/dnn_dir'
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
+    show_plots: True
