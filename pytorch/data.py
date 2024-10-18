@@ -31,7 +31,7 @@ def load_data(params, logger):
         duration = np.expand_dims(duration, axis=1)
         features = np.concatenate([rate, duration], axis=1)
     else:
-        raise ValueError('Unknown parameter for data->data_type')
+        raise ValueError(f"Unknown data_type: {data_type}")
 
     # load features noise
     if 'TIME_NOISE'.casefold() == data_type:
@@ -130,14 +130,57 @@ def load_data(params, logger):
 
     return features, labels, features_noise
 
-def _preprocess_apply_scale(data_dict, scale):
-    for key in data_dict.keys():
-        np.add(     data_dict[key], -scale['shift'],   out=data_dict[key])
-        np.multiply(data_dict[key], 1.0/scale['mult'], out=data_dict[key])
+def _log_transform(data, shift=0.0):
+    """ Applies log-transform for preprocessing. """
+    if isinstance(data, dict):
+        for key in data.keys():
+            np.log(shift + data[key], out=data[key])
+    else:
+        np.log(shift + data, out=data)
+
+def _log_transform_inverse(data, shift=0.0):
+    """ Applies inverse of log-transform for postprocessing. """
+    if isinstance(data, dict):
+        for key in data.keys():
+            np.exp(data[key], out=data[key])
+            np.add(data[key], -shift, out=data[key])
+    else:
+        np.exp(data, out=data)
+        np.add(data, -shift, out=data)
+
+def _apply_scale(data, scale):
+    """ Applies scale for preprocessing. """
+    if isinstance(data, dict):
+        for key in data.keys():
+            np.add(     data[key], -scale['shift'],   out=data[key])
+            np.multiply(data[key], 1.0/scale['mult'], out=data[key])
+    else:
+        np.add(     data, -scale['shift'],   out=data)
+        np.multiply(data, 1.0/scale['mult'], out=data)
+
+def _apply_scale_inverse(data, scale):
+    """ Applies inverse scale for postprocessing. """
+    if isinstance(data, dict):
+        for key in data.keys():
+            np.multiply(data[key], scale['mult'],  out=data[key])
+            np.add(     data[key], scale['shift'], out=data[key])
+    else:
+        np.multiply(data, scale['mult'],  out=data)
+        np.add(     data, scale['shift'], out=data)
 
 def preprocess_features(features: dict, params, logger):
     data_type = params['data']['data_type'].casefold()
-    # calculate min and max
+    # apply transformation
+    if 'TIME'.casefold()       == data_type or \
+       'TIME_NOISE'.casefold() == data_type or \
+       'RATE'.casefold()       == data_type:
+       pass
+    elif 'RATE_DURATION'.casefold() == data_type:
+        for key in features.keys():
+            _log_transform(features[key][...,1], shift=1.0)
+    else:
+        raise ValueError(f"Unknown data_type: {data_type}")
+    # calculate scaling
     if 'TIME'.casefold()       == data_type or \
        'TIME_NOISE'.casefold() == data_type:
         # nothing to do
@@ -146,24 +189,20 @@ def preprocess_features(features: dict, params, logger):
          'RATE_DURATION'.casefold() == data_type:
         assert 3 == features['train'].ndim
         assert 1 == features['train'].shape[1]
-        features_min = np.nanmin(features['train'], axis=0, keepdims=True)
-        features_max = np.nanmax(features['train'], axis=0, keepdims=True)
-        features_std = np.nanstd(features['train'], axis=0, keepdims=True)
-        features_med = np.nanmedian(features['train'], axis=0, keepdims=True)
-        # adjust if max seems too large
-        lg_idx_ = (features_med < (features_max - 2.0*features_std)).flatten()
-        lg_val_ = (features_max - features_std).flatten()
-        for i in range(len(lg_idx_)):
-            data_ = features['train'][...,i]
-            data_ = data_[data_ < lg_val_[i]]
-            features_max[...,i] = np.nanmax(data_, axis=0)
+        features_min  = np.nanmin (features['train'], axis=0, keepdims=True)
+        features_max  = np.nanmax (features['train'], axis=0, keepdims=True)
+        features_mean = np.nanmean(features['train'], axis=0, keepdims=True)
+        features_std  = np.nanstd (features['train'], axis=0, keepdims=True)
         # set scale
         scale = {'shift': features_min, 'mult': (features_max - features_min)}
+        if 'RATE_DURATION'.casefold() == data_type:
+            scale['shift'][...,1] = features_mean[...,1]
+            scale['mult'][...,1]  = features_std[...,1]
     else:
-        raise ValueError('Unknown parameter for data->data_type')
+        raise ValueError(f"Unknown data_type: {data_type}")
     # apply scaling
     logger.info(f"features scale: {scale}")
-    _preprocess_apply_scale(features, scale)
+    _apply_scale(features, scale)
     # replace nan values
     if 'TIME'.casefold()       == data_type or \
        'TIME_NOISE'.casefold() == data_type:
@@ -173,7 +212,7 @@ def preprocess_features(features: dict, params, logger):
         for key in features.keys():
             features[key] = np.where(np.isnan(features[key]), -1.0, features[key])
     else:
-        raise ValueError('Unknown parameter for data->data_type')
+        raise ValueError(f"Unknown data_type: {data_type}")
     # return scale
     return scale
 
@@ -182,26 +221,19 @@ def preprocess_features_noise(features_noise, scale):
        features_noise['validate'] is not None and \
        features_noise['test'] is not None:
         # apply scaling
-        _preprocess_apply_scale(features_noise, scale)
+        _apply_scale(features_noise, scale)
 
 def preprocess_labels(labels: dict, params, logger):
-    labels_min = np.min(labels['train'], axis=0, keepdims=True)
-    labels_max = np.max(labels['train'], axis=0, keepdims=True)
-    scale = {'shift': labels_min, 'mult': (labels_max - labels_min)}
+    scale = {'shift': 0.0, 'mult': 1.0}
     # apply scaling
     logger.info(f"labels scale: {scale}")
-    _preprocess_apply_scale(labels, scale)
+    _apply_scale(labels, scale)
     # return scale
     return scale
 
-def _postprocess_apply_scale(data_dict, scale):
-    for key in data_dict.keys():
-        np.multiply(data_dict[key], scale['mult'],  out=data_dict[key])
-        np.add(     data_dict[key], scale['shift'], out=data_dict[key])
-
 def postprocess_labels(labels_predict, scale):
     # apply scaling
-    _postprocess_apply_scale(labels_predict, scale)
+    _apply_scale_inverse(labels_predict, scale)
 
 ###############################################################################
 
@@ -222,18 +254,18 @@ def get_conditional_positions(features: np.ndarray, params):
     fn_params = {
         'n_bins': {
             'TIME':     None,
-            'RATE':     2000,
-            'DURATION':  200,
+            'RATE':     1000,
+            'DURATION':  100,
         },
         'range': {
             'TIME':     None,
-            'RATE':     [0.0, 2.0],
-            'DURATION': [0.0, 2.0],
+            'RATE':     [ 0.5, 1.0],
+            'DURATION': [-0.5, 0.5],
         },
         'relevant_bins_threshold': {
             'TIME':     None,
-            'RATE':     features.shape[0] * 0.04,
-            'DURATION': features.shape[0] * 0.04,
+            'RATE':     features.shape[0] * 0.06,
+            'DURATION': features.shape[0] * 0.02,
         }
     }
     # extract conditional positions
@@ -260,7 +292,7 @@ def get_conditional_positions(features: np.ndarray, params):
                     fn_params['relevant_bins_threshold'][key]
             ))
     else:
-        raise ValueError('Unknown parameter for data->data_type')
+        raise ValueError(f"Unknown data_type: {data_type}")
     return cond_positions
 
 def _filter_samples(features, targets, position, threshold):
@@ -289,10 +321,10 @@ def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position,
         raise NotImplementedError()
     elif 'RATE'.casefold()          == data_type or \
          'RATE_DURATION'.casefold() == data_type:
-        threshold = [0.05, 0.03]
+        threshold = [0.01, 0.10]
         features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
     else:
-        raise ValueError('Unknown parameter for data->data_type')
+        raise ValueError(f"Unknown data_type: {data_type}")
     return features_cond, targets_cond
 
 ###############################################################################

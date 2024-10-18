@@ -34,7 +34,7 @@ def create_denseNet(params, logger):
             params['data']['num_labels'],      # output_size
             hidden_layers_sizes=net_params['dense_layer_sizes'],
             hidden_layers_activation=_get_activation(net_params['activation_fn']),
-            output_layer_activation=nn.Sigmoid(),
+            output_layer_activation=None,
             use_dropout=net_params['dropout']
     )
 
@@ -60,7 +60,7 @@ def create_convNet(params, logger):
             hidden_dense_layers_sizes=net_params['dense_layer_sizes'],
             hidden_dense_layers_activation=_get_activation(net_params['activation_fn']),
             output_size=params['data']['num_labels'],
-            output_layer_activation=nn.Sigmoid(),
+            output_layer_activation=None,
             use_dropout=net_params['dropout']
     )
 
@@ -72,7 +72,7 @@ def create_transformerNet(params, logger):
             net_params['transformer_embedding_size'],
             net_params['transformer_n_heads'],
             net_params['transformer_feedforward_size'],
-            output_layer_activation=nn.Sigmoid(),
+            output_layer_activation=None,
             use_dropout=net_params['dropout']
     )
 
@@ -108,7 +108,7 @@ def create_gan(params, logger):
             params['data']['num_labels'],                                      # output_size
             hidden_layers_sizes=g_net_params['dense_layer_sizes'],
             hidden_layers_activation=_get_activation(g_net_params['activation_fn']),
-            output_layer_activation=nn.Sigmoid(),
+            output_layer_activation=None,
             use_dropout=g_net_params['dropout']
         )
 #   elif NetworkType.CONVNET == g_net_type:
