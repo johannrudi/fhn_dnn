@@ -1,0 +1,52 @@
+description: "Options for Autoencoder"
+
+data:
+    data_dir:  '../data/float32' # relative path to data directory
+    data_type: 'TIME'      # 'TIME', 'TIME_NOISE', 'RATE', 'RATE_DURATION'
+    Ntrain:    1024
+    Nvalidate: 2048
+    Ntest:     2048
+    train_shuffle_buffer_size: 1000
+    train_batch_size: 256
+    eval_batch_size:  256
+    random_seed: 123
+    # latent space of encoder output / decoder input
+    latent_dim: 32
+
+e_net:
+    type: 'denseNet'  # 'denseNet', 'convNet'
+    dense_layer_sizes:
+        - 256
+        - 128
+        - 64
+        - 32
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+d_net:
+    type: 'denseNet'  # 'denseNet', 'convNet'
+    dense_layer_sizes:
+        - 32
+        - 64
+        - 128
+        - 256
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+optimizer:
+    learning_rate: 0.001
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1.0e-8
+
+training:
+    epochs: 400
+
+runconfig:
+    mode: 'TRAIN'
+    load_dir: #'runs/ae_dir'
+    save_dir:  'runs/ae_dir'
+    log_epochs: 1
+    save_checkpoints_epochs: 50
+    debug: True
+    show_plots: True

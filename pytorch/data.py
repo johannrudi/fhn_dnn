@@ -130,6 +130,12 @@ def load_data(params, logger):
 
     return features, labels, features_noise
 
+def load_timesteps(params):
+    data_params = params['data']
+    data_dir    = pathlib.Path(data_params['data_dir'])
+    timesteps   = np.load(data_dir/'fhn_T200_samplePrior_time.npy')
+    return timesteps
+
 def _log_transform(data, shift=0.0):
     """ Applies log-transform for preprocessing. """
     if isinstance(data, dict):
@@ -174,7 +180,7 @@ def preprocess_features(features: dict, params, logger):
     if 'TIME'.casefold()       == data_type or \
        'TIME_NOISE'.casefold() == data_type or \
        'RATE'.casefold()       == data_type:
-       pass
+        pass
     elif 'RATE_DURATION'.casefold() == data_type:
         for key in features.keys():
             _log_transform(features[key][...,1], shift=1.0)
@@ -223,6 +229,18 @@ def preprocess_features_noise(features_noise, scale):
         # apply scaling
         _apply_scale(features_noise, scale)
 
+def postprocess_features(features_predict, scale, params):
+    data_type = params['data']['data_type'].casefold()
+    if 'TIME'.casefold()       == data_type or \
+       'TIME_NOISE'.casefold() == data_type:
+        # apply inverse scaling
+        _apply_scale_inverse(features_predict, scale)
+#   elif 'RATE'.casefold()          == data_type or \
+#        'RATE_DURATION'.casefold() == data_type:
+#       TODO
+    else:
+        raise ValueError(f"Unknown data_type: {data_type}")
+
 def preprocess_labels(labels: dict, params, logger):
     scale = {'shift': 0.0, 'mult': 1.0}
     # apply scaling
@@ -232,7 +250,7 @@ def preprocess_labels(labels: dict, params, logger):
     return scale
 
 def postprocess_labels(labels_predict, scale):
-    # apply scaling
+    # apply inverse scaling
     _apply_scale_inverse(labels_predict, scale)
 
 ###############################################################################
@@ -351,17 +369,22 @@ class FHN_Dataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
+        features = self.features[idx]
         if self.features_noise is not None:
             noise_idx = torch.randint(self.features_noise.size(0), (1,))[0]
-            features = self.features[idx] + self.features_noise[noise_idx]
+            features_transformed = features + self.features_noise[noise_idx]
         else:
-            features = self.features[idx]
+            features_transformed = features
         targets = self.targets[idx]
 
-        if 'xy'.casefold() == self.item_return_order:
-            sample = (targets, features)
+        if 'xx'.casefold() == self.item_return_order:
+            sample = (targets, targets)
+        elif 'xy'.casefold() == self.item_return_order:
+            sample = (targets, features_transformed)
         elif 'yx'.casefold() == self.item_return_order:
-            sample = (features, targets)
+            sample = (features_transformed, targets)
+        elif 'yy'.casefold() == self.item_return_order:
+            sample = (features_transformed, features)
         else:
             raise ValueError(f"Unknown item return order: {self.item_return_order}")
         return sample

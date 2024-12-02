@@ -7,8 +7,9 @@ import torch.nn as nn
 import numpy as np
 
 from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
-from dlkit.nets.conv import Conv1dModel
+from dlkit.nets.conv1d import Conv1dModel
 from dlkit.nets.transformer import Transformer1d0dModel
+from dlkit.nets.autoencoder import Autoencoder
 
 from utils import NetworkType
 
@@ -27,7 +28,7 @@ def _get_activation(name):
 def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
     return int( (in_length + 2*padding - dilation*(kernel_size - 1) - 1) / stride + 1 )
 
-def create_denseNet(params, logger):
+def _create_denseNet(params, logger):
     net_params = params['net']
     return MLPModel(
             params['data']['num_features'][1], # input_size
@@ -38,7 +39,7 @@ def create_denseNet(params, logger):
             use_dropout=net_params['dropout']
     )
 
-def create_convNet(params, logger):
+def _create_convNet(params, logger):
     net_params = params['net']
     hidden_conv_layers_kernels = len(net_params['conv_layer_sizes'])*[3]
     hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
@@ -64,7 +65,7 @@ def create_convNet(params, logger):
             use_dropout=net_params['dropout']
     )
 
-def create_transformerNet(params, logger):
+def _create_transformerNet(params, logger):
     net_params = params['net']
     return Transformer1d0dModel(
             params['data']['num_features'][1], # src_size
@@ -84,15 +85,63 @@ def create_dnn(params, logger):
     logger.info(f"Network type: {net_params['type']}, key: {net_type}")
     # create network
     if NetworkType.DENSENET == net_type:
-        net = create_denseNet(params, logger)
+        net = _create_denseNet(params, logger)
     elif NetworkType.CONVNET == net_type:
-        net = create_convNet(params, logger)
+        net = _create_convNet(params, logger)
     elif NetworkType.TRANSFORMERNET == net_type:
-        net = create_transformerNet(params, logger)
+        net = _create_transformerNet(params, logger)
     else:
         raise NotImplementedError()
     # return network
     return net
+
+def create_enc_dec(params, logger):
+    e_net_params    = params['e_net']
+    d_net_params    = params['d_net']
+    e_net_type      = NetworkType.get_from_name(e_net_params['type'])
+    d_net_type      = NetworkType.get_from_name(d_net_params['type'])
+    logger.info(f"Encoder type: {e_net_params['type']}, key: {e_net_type}")
+    logger.info(f"Decoder type: {d_net_params['type']}, key: {d_net_type}")
+    # create encoder network
+    if NetworkType.DENSENET == e_net_type:
+        e_net = MLPModel(
+            params['data']['num_features'][1], # input_size
+            params['data']['latent_dim'],      # output_size
+            hidden_layers_sizes=e_net_params['dense_layer_sizes'],
+            hidden_layers_activation=_get_activation(e_net_params['activation_fn']),
+            output_layer_activation=None,
+            use_dropout=e_net_params['dropout']
+    )
+#   elif NetworkType.CONVNET == e_net_type:
+#       TODO
+#   elif NetworkType.TRANSFORMERNET == e_net_type:
+#       TODO
+    else:
+        raise NotImplementedError()
+    # create encoder network
+    if NetworkType.DENSENET == d_net_type:
+        d_net = MLPModel(
+            params['data']['latent_dim'],      # input_size
+            params['data']['num_features'][1], # output_size
+            hidden_layers_sizes=d_net_params['dense_layer_sizes'],
+            hidden_layers_activation=_get_activation(d_net_params['activation_fn']),
+            output_layer_activation=None,
+            use_dropout=d_net_params['dropout']
+    )
+#   elif NetworkType.CONVNET == d_net_type:
+#       TODO
+#   elif NetworkType.TRANSFORMERNET == d_net_type:
+#       TODO
+    else:
+        raise NotImplementedError()
+    # return networks
+    return e_net, d_net
+
+def create_ae(params, logger):
+    e_net, d_net = create_enc_dec(params, logger)
+    def _output_transf(y):
+        return y.reshape(-1, *params['data']['num_features'])
+    return Autoencoder(e_net, d_net, output_layer_transformation=_output_transf)
 
 def create_gan(params, logger):
     g_net_params    = params['g_net']
