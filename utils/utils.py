@@ -3,6 +3,7 @@ Enumerators
 """
 
 import enum
+import datetime
 
 class ModeKeys(enum.Enum):
     TRAIN    = enum.auto()
@@ -63,6 +64,7 @@ def save_parameters(params, save_dir, filename="params.yaml"):
             + " save_dir must be passed through the yaml file"
         )
     # set path and create subdirectories
+    filename = "params/params_" + str(datetime.datetime.now()) + ".yaml"
     path = pathlib.Path(save_dir)/filename
     try:
         os.makedirs(str(path.parent), exist_ok=True)

@@ -351,7 +351,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 class FHN_Dataset(Dataset):
-    def __init__(self, features, targets, features_noise=None, item_return_order='yx'):
+    def __init__(self, features, targets, features_noise=None, features_transform_fn=None, item_return_order='yx'):
         super().__init__()
         self.features = torch.from_numpy(features)
         self.targets  = torch.from_numpy(targets)
@@ -360,6 +360,7 @@ class FHN_Dataset(Dataset):
             self.features_noise = torch.from_numpy(features_noise)
         else:
             self.features_noise = None
+        self.features_transform_fn = features_transform_fn
         self.item_return_order = item_return_order.casefold()
 
     def __len__(self):
@@ -375,6 +376,9 @@ class FHN_Dataset(Dataset):
             features_transformed = features + self.features_noise[noise_idx]
         else:
             features_transformed = features
+        if self.features_transform_fn is not None:
+            features_transformed = self.features_transform_fn(features_transformed)
+
         targets = self.targets[idx]
 
         if 'xx'.casefold() == self.item_return_order:
@@ -392,6 +396,7 @@ class FHN_Dataset(Dataset):
 
 def create_dataloader(params, logger, mode, features, targets,
                       features_noise={'train':None, 'validate':None, 'test':None, },
+                      features_transform_fn=None,
                       item_return_order='yx',
                       dataloader_kwargs={'shuffle':True, 'drop_last':False}):
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
@@ -408,14 +413,17 @@ def create_dataloader(params, logger, mode, features, targets,
     if ModeKeys.TRAIN == mode:
         dataset = FHN_Dataset(features['train'], targets['train'],
                               features_noise=features_noise['train'],
+                              features_transform_fn=features_transform_fn,
                               item_return_order=item_return_order)
     elif ModeKeys.VALIDATE == mode:
         dataset = FHN_Dataset(features['validate'], targets['validate'],
                               features_noise=features_noise['validate'],
+                              features_transform_fn=features_transform_fn,
                               item_return_order=item_return_order)
     else:
         dataset = FHN_Dataset(features['test'], targets['test'],
                               features_noise=features_noise['test'],
+                              features_transform_fn=features_transform_fn,
                               item_return_order=item_return_order)
 
     # create the dataloader
