@@ -1,3 +1,7 @@
+# output files
+pytorch/runs/*
+tensorflow/runs/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -131,6 +135,7 @@ dmypy.json
  # Editors
 *~
 [._]*.sw[a-p]
+.vscode*
 
 # Mac
 .DS_Store

@@ -1,0 +1,38 @@
+# EditorConfig of home directory
+# [https://editorconfig.org]
+
+# declare top-most EditorConfig file
+root = true
+
+# set unix-style newlines and default indentation; set a newline ending every file
+[*]
+end_of_line = lf
+insert_final_newline = true
+
+# set default charset; trim whitespace
+[*.{py,sh,yaml}]
+charset = utf-8
+trim_trailing_whitespace = true
+
+# Bash
+[*.{sh}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+
+# Makefiles
+[Makefile]
+indent_style = tab
+indent_size = 4
+
+# Python
+[*.{py}]
+indent_style = space
+indent_size = 4
+max_line_length = 160
+
+# Option files
+[*.{yaml}]
+indent_style = space
+indent_size = 2
+
