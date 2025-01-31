@@ -11,8 +11,8 @@ data:
     eval_batch_size:  256
     random_seed: 123
 
-net:
-    type: 'convNet'  # 'denseNet', 'convNet'
+model:
+    model_type: 'convNet'  # 'denseNet', 'convNet', 'transformerNet' (prototype)
     conv_layer_sizes:
         - 8
         - 16
@@ -22,7 +22,10 @@ net:
         - 32
         - 32
         - 32
-    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+    transformer_embedding_size: 32
+    transformer_n_heads: 4
+    transformer_feedforward_size: 256
     dropout: #0.2
 
 optimizer:
