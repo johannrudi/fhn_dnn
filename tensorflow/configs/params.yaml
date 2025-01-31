@@ -12,7 +12,7 @@ data:
     random_seed: 123
 
 model:
-    model_type: 'convNN'  # 'denseNN', 'convNN'
+    model_type: 'convNet'  # 'denseNet', 'convNet'
     conv_layer_sizes:
         - 8
         - 16

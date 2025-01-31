@@ -6,7 +6,6 @@ import argparse, os, pprint, timeit, sys
 import numpy as np
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
 from tensorflow.estimator import ModeKeys
 
