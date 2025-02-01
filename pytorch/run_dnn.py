@@ -10,7 +10,7 @@ import torch
 from tqdm import tqdm
 
 ###DEV
-sys.path.append('/Users/jrudi/code/dl-kit')
+sys.path.append('/home/jrudi/code/dl-kit')
 ###/DEV
 from dlkit.log.log_util import (logging_set_up, logging_get_logger)
 from dlkit.opt.train import train_epochs

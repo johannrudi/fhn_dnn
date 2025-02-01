@@ -11,8 +11,8 @@ data:
     eval_batch_size:  256
     random_seed: 123
 
-model:
-    model_type: 'convNet'  # 'denseNet', 'convNet', 'transformerNet' (prototype)
+net:
+    type: 'convNet'  # 'denseNet', 'convNet', 'transformerNet' (prototype)
     conv_layer_sizes:
         - 8
         - 16
@@ -44,4 +44,4 @@ runconfig:
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
-    show_plots: True
+    show_plots: False
