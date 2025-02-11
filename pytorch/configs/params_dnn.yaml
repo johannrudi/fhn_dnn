@@ -10,12 +10,12 @@ data:
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
-    autoencoder: 'True' # 'True', 'False'
-    autoencoder_use_latest: 'True' # 'True', 'False'
+    autoencoder: False
+    autoencoder_use_latest: True
     autoencoder_latent_space: 32
 
 net:
-    type: 'denseNet'  # 'denseNet', 'convNet'
+    type: 'convNet'  # 'denseNet', 'convNet'
     conv_layer_sizes:
         - 8
         - 16
@@ -25,7 +25,7 @@ net:
         - 32
         - 32
         - 32
-    activation_fn: 'swish'  # 'relu', 'gelu', 'swish'
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
     dropout: #0.2
 
 optimizer:
@@ -44,4 +44,4 @@ runconfig:
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
-    show_plots: True
+    show_plots: False

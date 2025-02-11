@@ -21,13 +21,10 @@ e_net:
         - 256
         - 128
         - 64
-    conv_conv_layer_sizes:
+    conv_layer_sizes:
         - 32
         - 16
         - 8
-    conv_dense_layer_sizes:
-        - 8
-        - 32
     activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
     dropout: #0.2
 
@@ -39,10 +36,7 @@ d_net:
         - 256
         - 512
         - 1000
-    conv_dense_layer_sizes:
-        - 8
-        - 500
-    conv_conv_layer_sizes:
+    conv_layer_sizes:
         - 8
         - 16
         - 32
@@ -66,4 +60,4 @@ runconfig:
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
-    show_plots: True
+    show_plots: False
