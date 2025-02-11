@@ -30,7 +30,7 @@ from data import (
     postprocess_labels,
     create_dataloader
 )
-from net import create_dnn
+from net import create_dnn, create_ae
 
 ###############################################################################
 
@@ -87,18 +87,53 @@ def run(args, params):
     targets_scale  = preprocess_labels  (targets,  params, logging_get_logger('preprocess_labels'))
     preprocess_features_noise(features_noise, features_scale)
 
+####DEV
+    if params['data']['autoencoder_load_dir']:
+        import glob
+        import yaml
+
+        requested_param_file = os.path.join(params['data']['autoencoder_load_dir'], 'params.yaml')
+
+        checkpoint_folders = glob.glob(os.path.join(params['data']['autoencoder_load_dir'], "checkpoints", "*"))
+        latest_folder = max(checkpoint_folders, key=os.path.getmtime)
+        checkpoint_files = glob.glob(os.path.join(latest_folder, "*.pt"))
+        requested_checkpoint = max(checkpoint_files, key=os.path.getmtime)
+
+        logger.info(f"Load autoencoder: use parameter file: {requested_param_file}")
+        logger.info(f"Load autoencoder: use checkpoint file: {requested_checkpoint}")
+
+        # load the AE params
+        with open(requested_param_file, 'r') as file:
+            ae_params = yaml.safe_load(file)
+        ae_params['data']['num_features'] = params['data']['num_features']
+
+        autoencoder = create_ae(ae_params, logging_get_logger('create_autoencoder'))
+        checkpoint = torch.load(requested_checkpoint)
+        autoencoder.load_state_dict(checkpoint['model_state_dict'])
+        autoencoder.eval()
+
+        print('<autoencoder>')
+        print(autoencoder)
+        print('</autoencoder>')
+
+        features_transform_fn = autoencoder.e_net
+    else:
+        features_transform_fn = None
+####/DEV
+
     # create dataloader
-    dataloader = create_dataloader(params, logging_get_logger('create_dataloader'), mode,
-                                   features, targets, features_noise=features_noise,
-                                   item_return_order='yx')
+    dataloader = create_dataloader(
+            params, logging_get_logger('create_dataloader'), mode,
+            features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
+            item_return_order='yx'
+    )
 
     #
     # Network
     #
 
     # create network
-    net_logger = logging_get_logger('create_network')
-    net = create_dnn(params, net_logger)
+    net = create_dnn(params, logging_get_logger('create_network'))
     print('<network>')
     print(net)
     print('</network>')
@@ -148,7 +183,7 @@ def run(args, params):
     for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
         dataloader_eval[key] = create_dataloader(
                 params, logging_get_logger('create_dataloader'), dl_mode,
-                features, targets, features_noise=features_noise,
+                features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
                 item_return_order='yx',
                 dataloader_kwargs={'shuffle':False, 'drop_last':False}
         )
