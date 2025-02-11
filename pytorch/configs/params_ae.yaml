@@ -49,4 +49,4 @@ runconfig:
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
-    show_plots: True
+    show_plots: False
