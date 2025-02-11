@@ -1,6 +1,9 @@
 # output files
 pytorch/runs/*
 tensorflow/runs/*
+# data files
+pytorch/*.npy
+tensorflow/*.pny
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
