@@ -12,30 +12,21 @@ It was published in the proceedings of the conference for Mathematical and Scien
 
 ## Running the code
 
-The executable code is located in the directory `tensorflow`.
-To run, `cd` into `tensorflow` and execute the script `run_dnn.py`.
-Different options for the inference can be set by modifying the file `config/params.yaml`.
-A reference output to compare the results on your machine is provided in the file `run_ddn_ref.out`.
+The executable code is located in the directories
+
+- the PyTorch version is in `pytorch`
+- the TensorFlow version is in `tensorflow`
+
+To run, `cd` into `pytorch`/`tensorflow` and execute the script `run_dnn.py`.
+Different options for the inference can be set by modifying the file
+`config/params*.yaml`.  A reference output to compare the results on your
+machine is provided in the file `run_ddn_ref.out`.
 
 The data for the training and evaluating the trained DNN models is located in the directory `data/float32`.
 
-## Imported Python packages
+## Python packages
 
 It is required to install the packages:
 
-- matplotlib
-- numpy
-- pyyaml
-- scikit-learn
-
-- pytorch
-- tensorflow
-
-Additionally, the following standard packages are used:
-
-- argparse
-- os
-- pathlib
-- pprint
-- time
-- sys
+- for the PyTorch version, use `pytorch/requirements.txt`
+- for the TensorFlow version, use `tensorflow/requirements.txt`
