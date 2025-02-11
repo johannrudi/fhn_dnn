@@ -7,8 +7,6 @@ import numpy as np
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 import torch
-import glob
-import yaml
 from tqdm import tqdm
 
 
@@ -92,18 +90,53 @@ def run(args, params):
     targets_scale  = preprocess_labels  (targets,  params, logging_get_logger('preprocess_labels'))
     preprocess_features_noise(features_noise, features_scale)
 
+####DEV
+    if params['data']['autoencoder_load_dir']:
+        import glob
+        import yaml
+
+        requested_param_file = os.path.join(params['data']['autoencoder_load_dir'], 'params.yaml')
+
+        checkpoint_folders = glob.glob(os.path.join(params['data']['autoencoder_load_dir'], "checkpoints", "*"))
+        latest_folder = max(checkpoint_folders, key=os.path.getmtime)
+        checkpoint_files = glob.glob(os.path.join(latest_folder, "*.pt"))
+        requested_checkpoint = max(checkpoint_files, key=os.path.getmtime)
+
+        logger.info(f"Load autoencoder: use parameter file: {requested_param_file}")
+        logger.info(f"Load autoencoder: use checkpoint file: {requested_checkpoint}")
+
+        # load the AE params
+        with open(requested_param_file, 'r') as file:
+            ae_params = yaml.safe_load(file)
+        ae_params['data']['num_features'] = params['data']['num_features']
+
+        autoencoder = create_ae(ae_params, logging_get_logger('create_autoencoder'))
+        checkpoint = torch.load(requested_checkpoint)
+        autoencoder.load_state_dict(checkpoint['model_state_dict'])
+        autoencoder.eval()
+
+        print('<autoencoder>')
+        print(autoencoder)
+        print('</autoencoder>')
+
+        features_transform_fn = autoencoder.e_net
+    else:
+        features_transform_fn = None
+####/DEV
+
     # create dataloader
-    dataloader = create_dataloader(params, logging_get_logger('create_dataloader'), mode,
-                                   features, targets, features_noise=features_noise,
-                                   item_return_order='yx')
+    dataloader = create_dataloader(
+            params, logging_get_logger('create_dataloader'), mode,
+            features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
+            item_return_order='yx'
+    )
 
     #
     # Network
     #
 
     # create network
-    net_logger = logging_get_logger('create_network')
-    net = create_dnn(params, net_logger)
+    net = create_dnn(params, logging_get_logger('create_network'))
     print('<network>')
     print(net)
     print('</network>')
@@ -129,42 +162,14 @@ def run(args, params):
         loss_fn = torch.nn.MSELoss()
 
         # checkpointing for saving network weights
-        if params['data']['autoencoder_use_latest'] == 'True':
-            checkpoint_dir    = os.path.join(self_dir, params['runconfig']['save_dir'], 'checkpoints')
-            checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
+        checkpoint_dir    = os.path.join(self_dir, params['runconfig']['save_dir'], 'checkpoints')
+        checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
 
-            params_dir = "/Users/aidanchadha/Desktop/fnn_pytorch/fhn_dnn/pytorch/runs/ae_dir/params/"
-            param_files = glob.glob(os.path.join(params_dir, "params_*.yaml"))
-            requested_param_file = max(param_files, key=os.path.getmtime)
-
-            checkpoints_base = "/Users/aidanchadha/Desktop/fnn_pytorch/fhn_dnn/pytorch/runs/ae_dir/checkpoints/"
-            checkpoint_folders = glob.glob(os.path.join(checkpoints_base, "*"))
-            latest_folder = max(checkpoint_folders, key=os.path.getmtime)
-            checkpoint_files = glob.glob(os.path.join(latest_folder, "*.pt"))
-            requested_checkpoint = max(checkpoint_files, key=os.path.getmtime)
-
-            print(f"Using parameter file: {requested_param_file}")
-            print(f"Using checkpoint file: {requested_checkpoint}")
-        else:
-            requested_param_file = "" # INPUT WANTED PARAM FILE
-            requested_checkpoint = "" # INPUT WANTED CHECKPOINT FILE
-
-        # Load the YAML file
-        with open(requested_param_file, 'r') as file:
-            ae_params = yaml.safe_load(file)
-
-        ae_params['data']['num_features'] = [1, 1000]
-
-        net_logger = logging_get_logger('create_network')
-        autoencoder = create_ae(ae_params, net_logger)
-
-        checkpoint = torch.load(requested_checkpoint)
-        autoencoder.load_state_dict(checkpoint['model_state_dict'])
-
+        # train network
         epoch_dlog = train_epochs(
                 params['training']['epochs'], net, dataloader, optimizer, loss_fn,
                 device=device, logger=logger,
-                checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir, autoencoder=autoencoder
+                checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir
         )
         time_train = epoch_dlog['time_train']
 
@@ -181,14 +186,14 @@ def run(args, params):
     for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
         dataloader_eval[key] = create_dataloader(
                 params, logging_get_logger('create_dataloader'), dl_mode,
-                features, targets, features_noise=features_noise,
+                features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
                 item_return_order='yx',
                 dataloader_kwargs={'shuffle':False, 'drop_last':False}
         )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    targets_predict = evaluate(net, dataloader_eval, params, autoencoder=autoencoder)
+    targets_predict = evaluate(net, dataloader_eval, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
@@ -205,8 +210,8 @@ def run(args, params):
         eval_mse[key+'_all'] =  metrics.mean_squared_error(y_data, y_pred)
         eval_r2[key]        = [metrics.r2_score(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
         eval_r2[key+'_all'] =  metrics.r2_score(y_data, y_pred)
-        print(f"Evaluate - MSE ({key}):      " + str(eval_mse[key]) + f" {eval_mse[key+'_all']}")
-        print(f"Evaluate - R2 score ({key}): " + str(eval_r2[key]) + f" {eval_r2[key+'_all']}")
+        logger.info(f"Evaluate - MSE ({key}):      " + str(eval_mse[key]) + f" {eval_mse[key+'_all']}")
+        logger.info(f"Evaluate - R2 score ({key}): " + str(eval_r2[key]) + f" {eval_r2[key+'_all']}")
 
     print('</evaluate>')
 
@@ -264,11 +269,8 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, dataloader_eval, params, autoencoder=None):
+def evaluate(net, dataloader_eval, params):
     net.eval()
-    if autoencoder is not None:
-        autoencoder.eval()
-
     # evaluate network predictions
     y_predict = dict()
     with torch.no_grad():
@@ -278,11 +280,6 @@ def evaluate(net, dataloader_eval, params, autoencoder=None):
                 x, y = data
                 x = x.to(device)
                 y = y.to(device)
-
-                # Use autoencoder if provided
-                if autoencoder is not None:
-                    x = autoencoder.encode(x)
-
                 y = net(x)
                 y_list.append(y.cpu().numpy())
             y_predict[key] = np.concatenate(y_list, axis=0)

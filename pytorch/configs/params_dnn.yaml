@@ -10,9 +10,8 @@ data:
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
-    autoencoder: False
-    autoencoder_use_latest: True
-    autoencoder_latent_space: 32
+    autoencoder_load_dir: #'runs/ae_dir'
+    autoencoder_latent_space: #32
 
 net:
     type: 'convNet'  # 'denseNet', 'convNet'

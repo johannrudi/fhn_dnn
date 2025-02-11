@@ -102,8 +102,7 @@ def run(args, params):
     #
 
     # create network
-    net_logger = logging_get_logger('create_network')
-    net = create_ae(params, net_logger)
+    net = create_ae(params, logging_get_logger('create_network'))
     print('<network>')
     print(net)
     print('</network>')

@@ -7,7 +7,7 @@ import torch.nn as nn
 import numpy as np
 
 from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
-from dlkit.nets.conv1d import Conv1dModel, Conv1dUpscaleModelInterpolate
+from dlkit.nets.conv1d import Conv1dModel
 from dlkit.nets.transformer import Transformer1d0dModel
 from dlkit.nets.autoencoder import Autoencoder
 
@@ -30,18 +30,13 @@ def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
 
 def _create_denseNet(params, logger):
     net_params = params['net']
-    if params['data']['autoencoder'] == 'True':
-        return MLPModel(
-            params['data']['autoencoder_latent_space'],  # LATENT_SPACE_SIZE
-            params['data']['num_labels'],  # output_size
-            hidden_layers_sizes=net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(net_params['activation_fn']),
-            output_layer_activation=None,
-            use_dropout=net_params['dropout']
-        )
+    if params['data']['autoencoder_load_dir']:
+        input_size = params['data']['autoencoder_latent_space']
+    else:
+        input_size = params['data']['num_features'][1]
+    output_size = params['data']['num_labels']
     return MLPModel(
-            params['data']['num_features'][1], # input_size
-            params['data']['num_labels'],      # output_size
+            input_size, output_size,
             hidden_layers_sizes=net_params['dense_layer_sizes'],
             hidden_layers_activation=_get_activation(net_params['activation_fn']),
             output_layer_activation=None,
@@ -122,33 +117,18 @@ def create_enc_dec(params, logger):
             use_dropout=e_net_params['dropout']
     )
     elif NetworkType.CONVNET == e_net_type:
-        hidden_conv_layers_kernels = len(e_net_params['conv_conv_layer_sizes']) * [3]
+        hidden_conv_layers_kernels = len(e_net_params['conv_layer_sizes']) * [3]
         hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
-
-        # calculate length of features after convolutional layers
-        n_features = params['data']['num_features'][1]
-        for i, _ in enumerate(e_net_params['conv_conv_layer_sizes']):
-            n_features = _get_conv1d_length(n_features, hidden_conv_layers_kernels[i],
-                                                     stride=hidden_conv_layers_kwargs['stride'],
-                                                     padding=hidden_conv_layers_kwargs['padding'])
-        n_channels_encoding = e_net_params['conv_conv_layer_sizes'][-1] * params['data']['num_features'][0]
-        n_features_dense = n_features * n_channels_encoding
-
-        e_net = Conv1dModel(
-            params['data']['num_features'][0],  # input_channels
-            hidden_conv_layers_channels_mult=e_net_params['conv_conv_layer_sizes'],
-            hidden_conv_layers_kernels=hidden_conv_layers_kernels,
-            hidden_conv_layers_activation=_get_activation(e_net_params['activation_fn']),
-            hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
-            hidden_dense_input_size=n_features_dense,
-            hidden_dense_layers_sizes=e_net_params['conv_dense_layer_sizes'],
-            hidden_dense_layers_activation=_get_activation(e_net_params['activation_fn']),
-            output_size=e_net_params['conv_dense_layer_sizes'][-1],
-            use_dropout=e_net_params['dropout']
-        )
-
-    #   elif NetworkType.TRANSFORMERNET == e_net_type:
-    #       TODO
+#       e_net = Conv1dModel(
+#           params['data']['num_features'][0],  # input_channels
+#           hidden_conv_layers_channels_mult=e_net_params['conv_layer_sizes'],
+#           hidden_conv_layers_kernels=hidden_conv_layers_kernels,
+#           hidden_conv_layers_activation=_get_activation(e_net_params['activation_fn']),
+#           hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
+#           use_dropout=e_net_params['dropout']
+#       )
+    #elif NetworkType.TRANSFORMERNET == e_net_type:
+    #   TODO
     else:
         raise NotImplementedError()
     # create decoder network
@@ -162,22 +142,18 @@ def create_enc_dec(params, logger):
             use_dropout=d_net_params['dropout']
     )
     elif NetworkType.CONVNET == d_net_type:
-        hidden_conv_layers_kernels = len(d_net_params['conv_conv_layer_sizes']) * [3]
+        hidden_conv_layers_kernels = len(d_net_params['conv_layer_sizes']) * [3]
         hidden_conv_layers_kwargs = {'stride': 1, 'padding': 1, 'padding_mode': 'zeros'}
-        n_features = e_net_params['conv_dense_layer_sizes'][-1]
-
-        d_net = Conv1dUpscaleModelInterpolate(
-            n_features,  # input_size
-            hidden_dense_layers_sizes=d_net_params['conv_dense_layer_sizes'],
-            hidden_dense_layers_activation=_get_activation(d_net_params['activation_fn']),
-            hidden_conv_layers_channels_mult=d_net_params['conv_conv_layer_sizes'],
-            hidden_conv_layers_kernels=hidden_conv_layers_kernels,
-            hidden_conv_layers_activation=_get_activation(d_net_params['activation_fn']),
-            hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
-            use_dropout=d_net_params['dropout']
-        )
-    #   elif NetworkType.TRANSFORMERNET == d_net_type:
-#       TODO
+#       d_net = Conv1dUpscaleModelInterpolate(
+#           params['data']['latent_dim'],  # input_size
+#           hidden_conv_layers_channels_mult=d_net_params['conv_layer_sizes'],
+#           hidden_conv_layers_kernels=hidden_conv_layers_kernels,
+#           hidden_conv_layers_activation=_get_activation(d_net_params['activation_fn']),
+#           hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
+#           use_dropout=d_net_params['dropout']
+#       )
+    #elif NetworkType.TRANSFORMERNET == d_net_type:
+    #   TODO
     else:
         raise NotImplementedError()
     # return networks
