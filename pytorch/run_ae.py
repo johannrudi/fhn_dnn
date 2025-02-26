@@ -90,9 +90,10 @@ def run(args, params):
     preprocess_features_noise(features_noise, features_scale)
 
     # create dataloader
-    dataloader = create_dataloader(params, logging_get_logger('create_dataloader'), mode,
-                                   features, targets, features_noise=features_noise,
-                                   item_return_order='yy')
+    dataloader = create_dataloader(
+            params, logging_get_logger('create_dataloader'), mode,
+            features, targets, features_noise=features_noise,
+            item_return_order='yy')
 
     #
     # Network
@@ -108,6 +109,9 @@ def run(args, params):
     if params['runconfig']['load_dir']:
         net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
         net.load_state_dict(torch.load(net_path))
+
+    # transfer to device
+    net.to(device)
 
     #
     # Training

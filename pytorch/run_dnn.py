@@ -143,6 +143,9 @@ def run(args, params):
         net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
         net.load_state_dict(torch.load(net_path))
 
+    # transfer to device
+    net.to(device)
+
     #
     # Training
     #
