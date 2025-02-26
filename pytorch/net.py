@@ -7,7 +7,7 @@ import torch.nn as nn
 import numpy as np
 
 from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
-from dlkit.nets.conv1d import Conv1dModel
+from dlkit.nets.conv1d import ConvNet
 from dlkit.nets.transformer import Transformer1d0dModel
 from dlkit.nets.autoencoder import Autoencoder
 
@@ -55,7 +55,7 @@ def _create_convNet(params, logger):
                                         padding=hidden_conv_layers_kwargs['padding'])
     n_channels = net_params['conv_layer_sizes'][-1] * params['data']['num_features'][0]
     n_features = n_features * n_channels
-    return Conv1dModel(
+    return ConvNet(
             params['data']['num_features'][0], # input_channels
             hidden_conv_layers_channels_mult=net_params['conv_layer_sizes'],
             hidden_conv_layers_kernels=hidden_conv_layers_kernels,
@@ -119,7 +119,7 @@ def create_enc_dec(params, logger):
     elif NetworkType.CONVNET == e_net_type:
         hidden_conv_layers_kernels = len(e_net_params['conv_layer_sizes']) * [3]
         hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
-#       e_net = Conv1dModel(
+#       e_net = ConvNet(
 #           params['data']['num_features'][0],  # input_channels
 #           hidden_conv_layers_channels_mult=e_net_params['conv_layer_sizes'],
 #           hidden_conv_layers_kernels=hidden_conv_layers_kernels,
