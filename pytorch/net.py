@@ -10,6 +10,7 @@ from dlkit.nets.mlp import (MLPModel, MLPModelMultIn)
 from dlkit.nets.conv1d import ConvNet
 from dlkit.nets.transformer import Transformer1d0dModel
 from dlkit.nets.autoencoder import Autoencoder
+from dlkit.nets.unet import UNet1d_2021 as UNet
 
 from utils import NetworkType
 
@@ -164,6 +165,11 @@ def create_ae(params, logger):
     def _output_transf(y):
         return y.reshape(-1, *params['data']['num_features'])
     return Autoencoder(e_net, d_net, output_layer_transformation=_output_transf)
+
+def create_unet(params, logger):
+    return UNet(1, 1,
+                internal_channels = params['net']['conv_internal_channels'],
+                channel_mult      = params['net']['conv_channel_mult'])
 
 def create_gan(params, logger):
     g_net_params    = params['g_net']
