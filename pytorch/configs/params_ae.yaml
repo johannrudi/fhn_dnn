@@ -14,35 +14,32 @@ data:
     latent_dim: 32
 
 e_net:
-    type: 'denseNet'  # 'denseNet', 'convNet'
+    type: 'ConvNet'  # 'DenseNet', 'ConvNet'
+
     dense_layer_sizes:
         - 1000
         - 512
         - 256
         - 128
         - 64
-    conv_layer_sizes:
-        - 32
-        - 16
-        - 8
     activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
     dropout: #0.2
 
+    conv_internal_channels: 32
+
 d_net:
-    type: 'denseNet'  # 'denseNet', 'convNet'
+    type: 'ConvNet'  # 'DenseNet', 'ConvNet'
+
     dense_layer_sizes:
         - 64
         - 128
         - 256
         - 512
         - 1000
-    conv_layer_sizes:
-        - 8
-        - 16
-        - 32
-        - 1
     activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
     dropout: #0.2
+
+    conv_internal_channels: 32
 
 optimizer:
     learning_rate: 0.001
@@ -51,7 +48,7 @@ optimizer:
     epsilon: 1.0e-8
 
 training:
-    epochs: 1600
+    epochs: 100  # 1000 for DenseNet, 100 for ConvNet
 
 runconfig:
     mode: 'TRAIN'

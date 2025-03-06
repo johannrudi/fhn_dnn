@@ -11,6 +11,8 @@ from dlkit.nets.conv1d import ConvNet
 from dlkit.nets.transformer import Transformer1d0dModel
 from dlkit.nets.autoencoder import Autoencoder
 from dlkit.nets.unet import UNet1d_2021 as UNet
+from dlkit.nets.unet import EncoderNet1d_2021 as EncoderConvNet
+from dlkit.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 
 from utils import NetworkType
 
@@ -118,16 +120,7 @@ def create_enc_dec(params, logger):
             use_dropout=e_net_params['dropout']
     )
     elif NetworkType.CONVNET == e_net_type:
-        hidden_conv_layers_kernels = len(e_net_params['conv_layer_sizes']) * [3]
-        hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
-#       e_net = ConvNet(
-#           params['data']['num_features'][0],  # input_channels
-#           hidden_conv_layers_channels_mult=e_net_params['conv_layer_sizes'],
-#           hidden_conv_layers_kernels=hidden_conv_layers_kernels,
-#           hidden_conv_layers_activation=_get_activation(e_net_params['activation_fn']),
-#           hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
-#           use_dropout=e_net_params['dropout']
-#       )
+        e_net = EncoderConvNet(1, internal_channels=e_net_params['conv_internal_channels'])
     #elif NetworkType.TRANSFORMERNET == e_net_type:
     #   TODO
     else:
@@ -143,16 +136,7 @@ def create_enc_dec(params, logger):
             use_dropout=d_net_params['dropout']
     )
     elif NetworkType.CONVNET == d_net_type:
-        hidden_conv_layers_kernels = len(d_net_params['conv_layer_sizes']) * [3]
-        hidden_conv_layers_kwargs = {'stride': 1, 'padding': 1, 'padding_mode': 'zeros'}
-#       d_net = Conv1dUpscaleModelInterpolate(
-#           params['data']['latent_dim'],  # input_size
-#           hidden_conv_layers_channels_mult=d_net_params['conv_layer_sizes'],
-#           hidden_conv_layers_kernels=hidden_conv_layers_kernels,
-#           hidden_conv_layers_activation=_get_activation(d_net_params['activation_fn']),
-#           hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
-#           use_dropout=d_net_params['dropout']
-#       )
+        d_net = DecoderConvNet(1, internal_channels=d_net_params['conv_internal_channels'])
     #elif NetworkType.TRANSFORMERNET == d_net_type:
     #   TODO
     else:
