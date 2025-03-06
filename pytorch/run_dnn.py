@@ -112,6 +112,9 @@ def run(args, params):
         autoencoder.load_state_dict(checkpoint['model_state_dict'])
         autoencoder.eval()
 
+        # transfer to device
+        autoencoder.to(device)
+
         print('<autoencoder>')
         print(autoencoder)
         print('</autoencoder>')
@@ -123,8 +126,12 @@ def run(args, params):
 
     # create dataloader
     dataloader = create_dataloader(
-            params, logging_get_logger('create_dataloader'), mode,
-            features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
+            params,
+            logging_get_logger('create_dataloader'),
+            mode,
+            features,
+            targets,
+            features_noise=features_noise,
             item_return_order='yx'
     )
 
@@ -167,9 +174,16 @@ def run(args, params):
 
         # train network
         epoch_dlog = train_epochs(
-                params['training']['epochs'], net, dataloader, optimizer, loss_fn,
-                device=device, logger=logger,
-                checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir
+                params['training']['epochs'],
+                net,
+                dataloader,
+                optimizer,
+                loss_fn,
+                device=device,
+                inputs_transform_fn=features_transform_fn,
+                logger=logger,
+                checkpoint_epochs=checkpoint_epochs,
+                checkpoint_dir=checkpoint_dir
         )
         time_train = epoch_dlog['time_train']
 
@@ -185,15 +199,19 @@ def run(args, params):
     dataloader_eval = dict()
     for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
         dataloader_eval[key] = create_dataloader(
-                params, logging_get_logger('create_dataloader'), dl_mode,
-                features, targets, features_noise=features_noise, features_transform_fn=features_transform_fn,
+                params,
+                logging_get_logger('create_dataloader'),
+                dl_mode,
+                features,
+                targets,
+                features_noise=features_noise,
                 item_return_order='yx',
                 dataloader_kwargs={'shuffle':False, 'drop_last':False}
         )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    targets_predict = evaluate(net, dataloader_eval, params)
+    targets_predict = evaluate(net, dataloader_eval, params, features_transform_fn=features_transform_fn)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
@@ -269,7 +287,7 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, dataloader_eval, params):
+def evaluate(net, dataloader_eval, params, features_transform_fn=None):
     net.eval()
     # evaluate network predictions
     y_predict = dict()
@@ -277,9 +295,10 @@ def evaluate(net, dataloader_eval, params):
         for key in dataloader_eval.keys():
             y_list = list()
             for data in dataloader_eval[key]:
-                x, y = data
+                x, _ = data
                 x = x.to(device)
-                y = y.to(device)
+                if features_transform_fn is not None:
+                    x = features_transform_fn(x)
                 y = net(x)
                 y_list.append(y.cpu().numpy())
             y_predict[key] = np.concatenate(y_list, axis=0)

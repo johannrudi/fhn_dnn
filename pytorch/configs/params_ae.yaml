@@ -2,7 +2,7 @@ description: "Options for Autoencoder"
 
 data:
     data_dir:  '../data/float32' # relative path to data directory
-    data_type: 'TIME'      # 'TIME', 'TIME_NOISE', 'RATE', 'RATE_DURATION'
+    data_type: 'TIME_NOISE'      # 'TIME', 'TIME_NOISE', 'RATE', 'RATE_DURATION'
     Ntrain:    1024
     Nvalidate: 2048
     Ntest:     2048
@@ -10,7 +10,7 @@ data:
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
-    # latent space of encoder output / decoder input
+    # latent space of encoder output / decoder input [ONLY FOR DENSE AE]
     latent_dim: 32
 
 e_net:
@@ -48,7 +48,7 @@ optimizer:
     epsilon: 1.0e-8
 
 training:
-    epochs: 300  # 1000 for DenseNet, 300 for ConvNet
+    epochs: 400  # 1000 for DenseNet, 400 for ConvNet
 
 runconfig:
     mode: 'TRAIN'
