@@ -48,7 +48,7 @@ optimizer:
     epsilon: 1.0e-8
 
 training:
-    epochs: 100  # 1000 for DenseNet, 100 for ConvNet
+    epochs: 300  # 1000 for DenseNet, 300 for ConvNet
 
 runconfig:
     mode: 'TRAIN'

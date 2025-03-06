@@ -377,7 +377,7 @@ class FHN_Dataset(Dataset):
         else:
             features_transformed = features
         if self.features_transform_fn is not None:
-            features_transformed = self.features_transform_fn(features_transformed)
+            features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
 
         targets = self.targets[idx]
 

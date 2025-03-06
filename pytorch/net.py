@@ -51,7 +51,10 @@ def _create_convNet(params, logger):
     hidden_conv_layers_kernels = len(net_params['conv_layer_sizes'])*[3]
     hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
     # calculate length of features after convolutional layers
-    n_features = params['data']['num_features'][1]
+    if params['data']['autoencoder_load_dir']:
+        n_features = params['data']['autoencoder_latent_space']
+    else:
+        n_features = params['data']['num_features'][1]
     for i, _ in enumerate(net_params['conv_layer_sizes']):
         n_features = _get_conv1d_length(n_features, hidden_conv_layers_kernels[i],
                                         stride=hidden_conv_layers_kwargs['stride'],
@@ -120,7 +123,11 @@ def create_enc_dec(params, logger):
             use_dropout=e_net_params['dropout']
     )
     elif NetworkType.CONVNET == e_net_type:
-        e_net = EncoderConvNet(1, internal_channels=e_net_params['conv_internal_channels'])
+        e_net = EncoderConvNet(
+                params['data']['num_features'][0], # input_channels
+                params['data']['num_features'][0], # output_channels
+                internal_channels=e_net_params['conv_internal_channels'],
+                channel_mult=(1, 1, 1))
     #elif NetworkType.TRANSFORMERNET == e_net_type:
     #   TODO
     else:
@@ -136,7 +143,11 @@ def create_enc_dec(params, logger):
             use_dropout=d_net_params['dropout']
     )
     elif NetworkType.CONVNET == d_net_type:
-        d_net = DecoderConvNet(1, internal_channels=d_net_params['conv_internal_channels'])
+        d_net = DecoderConvNet(
+                params['data']['num_features'][0], # input_channels
+                params['data']['num_features'][0], # output_channels
+                internal_channels=d_net_params['conv_internal_channels'],
+                channel_mult=(1, 1, 1))
     #elif NetworkType.TRANSFORMERNET == d_net_type:
     #   TODO
     else:
