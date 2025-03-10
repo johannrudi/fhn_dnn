@@ -39,11 +39,12 @@ def _create_denseNet(params, logger):
         input_size = params['data']['num_features'][1]
     output_size = params['data']['num_labels']
     return MLPNet(
-            input_size, output_size,
-            hidden_layers_sizes=net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(net_params['activation_fn']),
-            use_dropout=net_params['dropout'],
-            output_layer_activation=None
+            input_size,
+            output_size,
+            hidden_layers_sizes      = net_params['dense_layer_sizes'],
+            hidden_layers_activation = _get_activation(net_params['activation_fn']),
+            use_dropout              = net_params['dropout'],
+            output_layer_activation  = None
     )
 
 def _create_denseResNet(params, logger):
@@ -56,13 +57,10 @@ def _create_denseResNet(params, logger):
     return MLPResNet(
             input_size,
             output_size,
-            n_residual_blocks                  = net_params['n_residual_blocks'],
-            residual_blocks_size               = net_params['residual_blocks_size'],
-            residual_blocks_normalization_size = net_params['residual_blocks_normalization_size'],
-            residual_blocks_activation_size    = net_params['residual_blocks_activation_size'],
-            residual_blocks_activation         = _get_activation(net_params['activation_fn']),
-            use_dropout                        = net_params['dropout'],
-            output_layer_activation            = None
+            residual_blocks_sizes      = net_params['residual_blocks_sizes'],
+            residual_blocks_activation = _get_activation(net_params['activation_fn']),
+            use_dropout                = net_params['dropout'],
+            output_layer_activation    = None
     )
 
 def _create_convNet(params, logger):
@@ -197,12 +195,12 @@ def create_gan(params, logger):
     # create generator network
     if NetworkType.DENSENET == g_net_type:
         g_net = MLPNet_MultIn(
-            (params['data']['num_features'][1], params['data']['latent_dim']), # input_size
-            params['data']['num_labels'],                                      # output_size
-            hidden_layers_sizes=g_net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(g_net_params['activation_fn']),
-            use_dropout=g_net_params['dropout'],
-            output_layer_activation=None
+            params['data']['num_features'][1] + params['data']['latent_dim'], # input_size
+            params['data']['num_labels'],                                     # output_size
+            hidden_layers_sizes      = g_net_params['dense_layer_sizes'],
+            hidden_layers_activation = _get_activation(g_net_params['activation_fn']),
+            use_dropout              = g_net_params['dropout'],
+            output_layer_activation  = None
         )
 #   elif NetworkType.CONVNET == g_net_type:
 #       TODO
@@ -213,11 +211,11 @@ def create_gan(params, logger):
     # create discriminator network
     if NetworkType.DENSENET == d_net_type:
         d_net = MLPNet_MultIn(
-            (params['data']['num_features'][1], params['data']['num_labels']), # input_size
-            1,                                                                 # output_size
-            hidden_layers_sizes=d_net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(d_net_params['activation_fn']),
-            use_dropout=g_net_params['dropout']
+            params['data']['num_features'][1] + params['data']['num_labels'], # input_size
+            1,                                                                # output_size
+            hidden_layers_sizes      = d_net_params['dense_layer_sizes'],
+            hidden_layers_activation = _get_activation(d_net_params['activation_fn']),
+            use_dropout              = g_net_params['dropout']
         )
 #   elif NetworkType.CONVNET == g_net_type:
 #       TODO

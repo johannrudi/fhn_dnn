@@ -108,7 +108,7 @@ def run(args, params):
     # load network weights
     if params['runconfig']['load_dir']:
         net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
-        net.load_state_dict(torch.load(net_path))
+        net.load_state_dict(torch.load(net_path, map_location=device))
 
     # transfer to device
     net.to(device)

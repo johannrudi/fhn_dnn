@@ -17,12 +17,12 @@ net:
     type: 'DenseResNet'  # 'DenseNet', 'DenseResNet', 'ConvNet', 'TransformerNet' (prototype)
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
     dropout: #0.2
-    # ConvNet:
+
     conv_layer_sizes:
         - 8
         - 16
         - 32
-    # DenseNet, ConvNet:
+
     dense_layer_sizes:
         - 128
         - 128
@@ -32,12 +32,29 @@ net:
         - 128
         - 128
         - 128
-    # DenseResNet:
-    n_residual_blocks: 4
-    residual_blocks_size: 32
-    residual_blocks_normalization_size: 32
-    residual_blocks_activation_size: 128
-    # TransformerNet:
+
+    residual_blocks_sizes:
+        -
+            - 32
+            - 32
+            - 128
+            - 32
+        -
+            - 32
+            - 32
+            - 128
+            - 32
+        -
+            - 32
+            - 32
+            - 128
+            - 32
+        -
+            - 32
+            - 32
+            - 128
+            - 32
+
     transformer_embedding_size: 32
     transformer_n_heads: 4
     transformer_feedforward_size: 256

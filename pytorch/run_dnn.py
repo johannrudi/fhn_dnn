@@ -107,13 +107,11 @@ def run(args, params):
             ae_params = yaml.safe_load(file)
         ae_params['data']['num_features'] = params['data']['num_features']
 
+        # load the AE network
         autoencoder = create_ae(ae_params, logging_get_logger('create_autoencoder'))
-        checkpoint = torch.load(requested_checkpoint)
-        autoencoder.load_state_dict(checkpoint['model_state_dict'])
-        autoencoder.eval()
-
-        # transfer to device
+        autoencoder.load_state_dict(torch.load(requested_checkpoint, map_location=device))
         autoencoder.to(device)
+        autoencoder.eval()
 
         print('<autoencoder>')
         print(autoencoder)
@@ -148,7 +146,7 @@ def run(args, params):
     # load network weights
     if params['runconfig']['load_dir']:
         net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
-        net.load_state_dict(torch.load(net_path))
+        net.load_state_dict(torch.load(net_path, map_location=device))
 
     # transfer to device
     net.to(device)
