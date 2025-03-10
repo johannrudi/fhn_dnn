@@ -14,21 +14,29 @@ data:
     autoencoder_latent_space: 250
 
 net:
-    type: 'ConvNet'  # 'DenseNet', 'ConvNet', 'TransformerNet' (prototype)
+    type: 'DenseResNet'  # 'DenseNet', 'DenseResNet', 'ConvNet', 'TransformerNet' (prototype)
+    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+    dropout: #0.2
+    # ConvNet:
     conv_layer_sizes:
         - 8
         - 16
         - 32
+    # DenseNet, ConvNet:
     dense_layer_sizes:
         - 32
         - 32
         - 32
         - 32
-    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+    # DenseResNet:
+    n_residual_blocks: 4
+    residual_blocks_size: 32
+    residual_blocks_normalization_size: 32
+    residual_blocks_activation_size: 128
+    # TransformerNet:
     transformer_embedding_size: 32
     transformer_n_heads: 4
     transformer_feedforward_size: 256
-    dropout: #0.2
 
 optimizer:
     learning_rate: 0.002
@@ -37,7 +45,7 @@ optimizer:
     epsilon: 1.0e-8
 
 training:
-    epochs: 200
+    epochs: 400
 
 runconfig:
     mode: 'TRAIN'

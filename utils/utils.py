@@ -20,6 +20,7 @@ class ModeKeys(enum.Enum):
 
 class NetworkType(enum.Enum):
     DENSENET       = enum.auto()
+    DENSERESNET    = enum.auto()
     CONVNET        = enum.auto()
     TRANSFORMERNET = enum.auto()
 
