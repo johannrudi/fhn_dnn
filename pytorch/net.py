@@ -115,14 +115,14 @@ def create_dnn(params, logger):
     # create network
     if NetworkType.DENSENET == net_type:
         net = _create_denseNet(params, logger)
-    if NetworkType.DENSERESNET == net_type:
+    elif NetworkType.DENSERESNET == net_type:
         net = _create_denseResNet(params, logger)
     elif NetworkType.CONVNET == net_type:
         net = _create_convNet(params, logger)
     elif NetworkType.TRANSFORMERNET == net_type:
         net = _create_transformerNet(params, logger)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Type {net_type} is not implemented")
     # return network
     return net
 

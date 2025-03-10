@@ -24,10 +24,14 @@ net:
         - 32
     # DenseNet, ConvNet:
     dense_layer_sizes:
-        - 32
-        - 32
-        - 32
-        - 32
+        - 128
+        - 128
+        - 128
+        - 128
+        - 128
+        - 128
+        - 128
+        - 128
     # DenseResNet:
     n_residual_blocks: 4
     residual_blocks_size: 32
