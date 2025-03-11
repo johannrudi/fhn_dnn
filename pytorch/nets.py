@@ -37,7 +37,7 @@ def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
 def _create_MLPNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
-        input_size = params['data']['autoencoder_latent_space']
+        input_size = params['data']['autoencoder_latent_dim']
     else:
         input_size = params['data']['num_features'][1]
     output_size = params['data']['num_labels']
@@ -53,7 +53,7 @@ def _create_MLPNet(params, logger):
 def _create_MLPResNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
-        input_size = params['data']['autoencoder_latent_space']
+        input_size = params['data']['autoencoder_latent_dim']
     else:
         input_size = params['data']['num_features'][1]
     output_size = params['data']['num_labels']
@@ -72,7 +72,7 @@ def _create_convNet(params, logger):
     hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
     # calculate length of features after convolutional layers
     if params['data']['autoencoder_load_dir']:
-        n_features = params['data']['autoencoder_latent_space']
+        n_features = params['data']['autoencoder_latent_dim']
     else:
         n_features = params['data']['num_features'][1]
     for i, _ in enumerate(net_params['conv_layer_sizes']):

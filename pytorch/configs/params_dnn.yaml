@@ -11,7 +11,7 @@ data:
     eval_batch_size:  256
     random_seed: 123
     autoencoder_load_dir: #'runs/ae_dir'
-    autoencoder_latent_space: 250
+    autoencoder_latent_dim: 16  # e.g., 2, 4, 16, 64, 125
 
 net:
     type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet', 'TransformerNet' (prototype)
