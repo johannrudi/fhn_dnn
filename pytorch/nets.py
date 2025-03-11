@@ -2,6 +2,7 @@
 Create neural networks.
 """
 
+import math
 import torch
 import torch.nn as nn
 import numpy as np
@@ -16,7 +17,9 @@ from dlkit.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 
 from utils import NetworkType
 
-###############################################################################
+# --------------------------------------
+# Deep Neural Networks (DNNs) for Inverse Maps
+# --------------------------------------
 
 def _get_activation(name):
     if 'relu' == name.casefold():
@@ -31,7 +34,7 @@ def _get_activation(name):
 def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
     return int( (in_length + 2*padding - dilation*(kernel_size - 1) - 1) / stride + 1 )
 
-def _create_denseNet(params, logger):
+def _create_MLPNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
         input_size = params['data']['autoencoder_latent_space']
@@ -47,7 +50,7 @@ def _create_denseNet(params, logger):
             output_layer_activation  = None
     )
 
-def _create_denseResNet(params, logger):
+def _create_MLPResNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
         input_size = params['data']['autoencoder_latent_space']
@@ -104,17 +107,15 @@ def _create_transformerNet(params, logger):
             use_dropout=net_params['dropout']
     )
 
-###############################################################################
-
 def create_dnn(params, logger):
     net_params = params['net']
     net_type   = NetworkType.get_from_name(net_params['type'])
     logger.info(f"Network type: {net_params['type']}, key: {net_type}")
     # create network
-    if NetworkType.DENSENET == net_type:
-        net = _create_denseNet(params, logger)
-    elif NetworkType.DENSERESNET == net_type:
-        net = _create_denseResNet(params, logger)
+    if NetworkType.MLPNET == net_type:
+        net = _create_MLPNet(params, logger)
+    elif NetworkType.MLPRESNET == net_type:
+        net = _create_MLPResNet(params, logger)
     elif NetworkType.CONVNET == net_type:
         net = _create_convNet(params, logger)
     elif NetworkType.TRANSFORMERNET == net_type:
@@ -124,6 +125,10 @@ def create_dnn(params, logger):
     # return network
     return net
 
+# --------------------------------------
+# Autoencoder Networks
+# --------------------------------------
+
 def create_enc_dec(params, logger):
     e_net_params    = params['e_net']
     d_net_params    = params['d_net']
@@ -131,44 +136,63 @@ def create_enc_dec(params, logger):
     d_net_type      = NetworkType.get_from_name(d_net_params['type'])
     logger.info(f"Encoder type: {e_net_params['type']}, key: {e_net_type}")
     logger.info(f"Decoder type: {d_net_params['type']}, key: {d_net_type}")
+    input_size  = math.prod(params['data']['num_features'])
+    latent_size = params['data']['latent_dim']
+    output_size = input_size
+    input_channels  = params['data']['num_features'][0]
+    latent_channels = params['data']['num_features'][0]
+    output_channels = params['data']['num_features'][0]
     # create encoder network
-    if NetworkType.DENSENET == e_net_type:
+    if NetworkType.MLPNET == e_net_type:
         e_net = MLPNet(
-            params['data']['num_features'][1], # input_size
-            params['data']['latent_dim'],      # output_size
-            hidden_layers_sizes=e_net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(e_net_params['activation_fn']),
-            use_dropout=e_net_params['dropout'],
-            output_layer_activation=None
-    )
+                input_size,
+                latent_size,
+                hidden_layers_sizes      = e_net_params['dense_layer_sizes'],
+                hidden_layers_activation = _get_activation(e_net_params['activation_fn']),
+                use_dropout              = e_net_params['dropout']
+        )
+    elif NetworkType.MLPRESNET == e_net_type:
+        e_net = MLPResNet(
+                input_size,
+                latent_size,
+                residual_blocks_sizes      = e_net_params['residual_blocks_sizes'],
+                residual_blocks_activation = _get_activation(e_net_params['activation_fn']),
+                use_dropout                = e_net_params['dropout'],
+        )
     elif NetworkType.CONVNET == e_net_type:
         e_net = EncoderConvNet(
-                params['data']['num_features'][0], # input_channels
-                params['data']['num_features'][0], # output_channels
-                internal_channels=e_net_params['conv_internal_channels'],
-                channel_mult=(1, 1, 1))
-    #elif NetworkType.TRANSFORMERNET == e_net_type:
-    #   TODO
+                input_channels,
+                latent_channels,
+                internal_channels = e_net_params['conv_internal_channels'],
+                channel_mult      = (1, 1, 1)
+        )
     else:
         raise NotImplementedError()
     # create decoder network
-    if NetworkType.DENSENET == d_net_type:
+    if NetworkType.MLPNET == d_net_type:
         d_net = MLPNet(
-            params['data']['latent_dim'],      # input_size
-            params['data']['num_features'][1], # output_size
-            hidden_layers_sizes=d_net_params['dense_layer_sizes'],
-            hidden_layers_activation=_get_activation(d_net_params['activation_fn']),
-            use_dropout=d_net_params['dropout'],
-            output_layer_activation=None
-    )
+                latent_size,
+                output_size,
+                hidden_layers_sizes      = d_net_params['dense_layer_sizes'],
+                hidden_layers_activation = _get_activation(d_net_params['activation_fn']),
+                use_dropout              = d_net_params['dropout'],
+                output_layer_activation  = None
+        )
+    elif NetworkType.MLPRESNET == d_net_type:
+        d_net = MLPResNet(
+                latent_size,
+                output_size,
+                residual_blocks_sizes      = d_net_params['residual_blocks_sizes'],
+                residual_blocks_activation = _get_activation(d_net_params['activation_fn']),
+                use_dropout                = d_net_params['dropout']
+        )
     elif NetworkType.CONVNET == d_net_type:
         d_net = DecoderConvNet(
-                params['data']['num_features'][0], # input_channels
-                params['data']['num_features'][0], # output_channels
-                internal_channels=d_net_params['conv_internal_channels'],
-                channel_mult=(1, 1, 1))
-    #elif NetworkType.TRANSFORMERNET == d_net_type:
-    #   TODO
+                latent_channels,
+                output_channels,
+                internal_channels = d_net_params['conv_internal_channels'],
+                channel_mult      = (1, 1, 1)
+        )
     else:
         raise NotImplementedError()
     # return networks
@@ -180,10 +204,18 @@ def create_ae(params, logger):
         return y.reshape(-1, *params['data']['num_features'])
     return Autoencoder(e_net, d_net, output_layer_transformation=_output_transf)
 
+# --------------------------------------
+# UNet
+# --------------------------------------
+
 def create_unet(params, logger):
     return UNet(1, 1,
                 internal_channels = params['net']['conv_internal_channels'],
                 channel_mult      = params['net']['conv_channel_mult'])
+
+# --------------------------------------
+# Generative Adversarial Networks
+# --------------------------------------
 
 def create_gan(params, logger):
     g_net_params    = params['g_net']
@@ -193,7 +225,7 @@ def create_gan(params, logger):
     logger.info(f"Generator type:     {g_net_params['type']}, key: {g_net_type}")
     logger.info(f"Discriminator type: {d_net_params['type']}, key: {d_net_type}")
     # create generator network
-    if NetworkType.DENSENET == g_net_type:
+    if NetworkType.MLPNET == g_net_type:
         g_net = MLPNet_MultIn(
             params['data']['num_features'][1] + params['data']['latent_dim'], # input_size
             params['data']['num_labels'],                                     # output_size
@@ -209,7 +241,7 @@ def create_gan(params, logger):
     else:
         raise NotImplementedError()
     # create discriminator network
-    if NetworkType.DENSENET == d_net_type:
+    if NetworkType.MLPNET == d_net_type:
         d_net = MLPNet_MultIn(
             params['data']['num_features'][1] + params['data']['num_labels'], # input_size
             1,                                                                # output_size

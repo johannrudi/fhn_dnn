@@ -10,11 +10,15 @@ data:
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
-    # latent space of encoder output / decoder input [ONLY FOR DENSE AE]
-    latent_dim: 32
+    # latent space of encoder output / decoder input [ONLY FOR MLP NET]
+    latent_dim: 250
 
 e_net:
-    type: 'ConvNet'  # 'DenseNet', 'ConvNet'
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+    conv_internal_channels: 32
 
     dense_layer_sizes:
         - 1000
@@ -22,13 +26,25 @@ e_net:
         - 256
         - 128
         - 64
-    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
-    dropout: #0.2
 
-    conv_internal_channels: 32
+    residual_blocks_sizes:
+        -
+            - 1000
+            - 500
+            - 1000
+            - 500
+        -
+            - 500
+            - 250
+            - 500
+            - 250
 
 d_net:
-    type: 'ConvNet'  # 'DenseNet', 'ConvNet'
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+    conv_internal_channels: 32
 
     dense_layer_sizes:
         - 64
@@ -36,10 +52,18 @@ d_net:
         - 256
         - 512
         - 1000
-    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
-    dropout: #0.2
 
-    conv_internal_channels: 32
+    residual_blocks_sizes:
+        -
+            - 250
+            - 250
+            - 500
+            - 500
+        -
+            - 500
+            - 500
+            - 1000
+            - 1000
 
 optimizer:
     learning_rate: 0.001
@@ -48,7 +72,7 @@ optimizer:
     epsilon: 1.0e-8
 
 training:
-    epochs: 400  # 1000 for DenseNet, 400 for ConvNet
+    epochs: 400  # 1000 for MLPNet, 400 for ConvNet
 
 runconfig:
     mode: 'TRAIN'

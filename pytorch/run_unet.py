@@ -32,7 +32,7 @@ from data import (
     postprocess_labels,
     create_dataloader
 )
-from net import create_unet
+from nets import create_unet
 
 ###############################################################################
 

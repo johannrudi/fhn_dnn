@@ -14,7 +14,7 @@ data:
     autoencoder_latent_space: 250
 
 net:
-    type: 'DenseResNet'  # 'DenseNet', 'DenseResNet', 'ConvNet', 'TransformerNet' (prototype)
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet', 'TransformerNet' (prototype)
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
     dropout: #0.2
 

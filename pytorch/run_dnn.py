@@ -30,7 +30,7 @@ from data import (
     postprocess_labels,
     create_dataloader
 )
-from net import create_dnn, create_ae
+from nets import create_dnn, create_ae
 
 ###############################################################################
 
@@ -109,7 +109,8 @@ def run(args, params):
 
         # load the AE network
         autoencoder = create_ae(ae_params, logging_get_logger('create_autoencoder'))
-        autoencoder.load_state_dict(torch.load(requested_checkpoint, map_location=device))
+        checkpoint  = torch.load(requested_checkpoint, map_location=device)
+        autoencoder.load_state_dict(checkpoint['model_state_dict'])
         autoencoder.to(device)
         autoencoder.eval()
 
