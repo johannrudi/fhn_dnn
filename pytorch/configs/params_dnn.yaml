@@ -60,10 +60,17 @@ net:
     transformer_feedforward_size: 256
 
 optimizer:
-    learning_rate: 0.002
+    type: 'AdamW'  # 'Adam', 'AdamW'
+    learning_rate: 1.0e-2
     beta1: 0.9
     beta2: 0.999
     epsilon: 1.0e-8
+    weight_decay: 0.01  # used in AdamW
+    learning_rate_scheduler:
+        init_learning_rate: 1.0e-3
+        linear_epochs:   50  # num epochs to get from `init_learning_rate` to `learning_rate`
+        constant_epochs: 50  # num epochs to stay at `learning_rate`
+        final_learning_rate: 1.0e-4
 
 training:
     epochs: 400
