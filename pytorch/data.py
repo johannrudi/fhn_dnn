@@ -10,71 +10,74 @@ from utils import ModeKeys
 
 ###############################################################################
 
-def _load_numpy(data_type, data_dir):
+def _load_numpy(data_dir, features_type):
     if '2020' in data_dir.name:
         # load features
-        if 'TIME'.casefold()       == data_type or \
-           'TIME_NOISE'.casefold() == data_type:
+        if 'TIME'.casefold()       == features_type or \
+           'TIME_NOISE'.casefold() == features_type:
             features = np.load(data_dir/'fhn_T200_samplePrior_state0.npy')
-        elif 'RATE_DURATION'.casefold() == data_type:
+        elif 'RATE_DURATION'.casefold() == features_type:
             rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
             rate = np.expand_dims(rate, axis=1)
             duration = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
             duration = np.expand_dims(duration, axis=1)
             features = np.concatenate([rate, duration], axis=1)
         else:
-            raise ValueError(f"Unknown data_type: {data_type}")
+            raise ValueError(f"Unknown features_type: {features_type}")
         # load features noise
-        if 'TIME_NOISE'.casefold() == data_type:
+        if 'TIME_NOISE'.casefold() == features_type:
             features_noise = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy')
         else:
             features_noise = None
         # load targets
         targets = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
+        targets_noise = None
     elif '2025' in data_dir.name:
         # load features
-        if 'TIME'.casefold()       == data_type or \
-           'TIME_NOISE'.casefold() == data_type:
+        if 'TIME'.casefold()       == features_type or \
+           'TIME_NOISE'.casefold() == features_type:
             state_train = np.load(data_dir/'fhn_Ntrain20000_state_Nt2000_dt0.2.npy')
             state_test  = np.load(data_dir/'fhn_Ntest2000_state_Nt2000_dt0.2.npy')
-            features    = np.concatenate((state_train[:,0,:], state_test[:,0,:]), axis=0)
-        elif 'RATE_DURATION'.casefold() == data_type:
+            features    = np.concatenate((state_train[:,0:1,:], state_test[:,0:1,:]), axis=0)
+        elif 'RATE_DURATION'.casefold() == features_type:
             state_stats_train = np.load(data_dir/'fhn_Ntrain20000_state_stats.npy')
             state_stats_test  = np.load(data_dir/'fhn_Ntest2000_state_stats.npy')
             features = np.concatenate((state_stats_train, state_stats_test), axis=0)
         else:
-            raise ValueError(f"Unknown data_type: {data_type}")
+            raise ValueError(f"Unknown features_type: {features_type}")
         # load features noise
-        if 'TIME_NOISE'.casefold() == data_type:
+        if 'TIME_NOISE'.casefold() == features_type:
             noise_train = np.load(data_dir/'ar1_Ntrain20000_state_Nt2000_dt0.2.npy')
             noise_test  = np.load(data_dir/'ar1_Ntest2000_state_Nt2000_dt0.2.npy')
             features_noise = np.concatenate((noise_train, noise_test), axis=0)
+            features_noise = np.expand_dims(features_noise, axis=1)
         else:
             features_noise = None
         # load targets
         param_train = np.load(data_dir/'fhn_Ntrain20000_param.npy')
         param_test  = np.load(data_dir/'fhn_Ntest2000_param.npy')
-        targets    = np.concatenate((param_train, param_test), axis=0)
+        targets     = np.concatenate((param_train, param_test), axis=0)
+        targets_noise = None # TODO
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unsupported data directory: {data_dir}")
     # return features, noise, and targets
     return features, targets, features_noise
 
 def load_data(params, logger):
-    data_params    = params['data']
-    data_type      = params['data']['data_type'].casefold()
-    data_dir       = pathlib.Path(data_params['data_dir'])
+    data_params   = params['data']
+    features_type = params['data']['features_type'].casefold()
+    data_dir      = pathlib.Path(data_params['data_dir'])
 
     # load numpy files
-    features, targets, features_noise = _load_numpy(data_type, data_dir)
+    features, targets, features_noise = _load_numpy(data_dir, features_type)
 
     # print info
     logger.info(f"features shape:       {features.shape}, dtype: {features.dtype}")
     logger.info(f"targets shape:        {targets.shape}, dtype: {targets.dtype}")
     if features_noise is not None:
         logger.info(f"features_noise shape: {features_noise.shape}, dtype: {features_noise.dtype}")
-    assert targets.shape[0] == features.shape[0]
-    assert features_noise is None or features_noise.shape == features.shape
+    assert targets.shape[0] == features.shape[0], (targets.shape[0], features.shape[0])
+    assert features_noise is None or features_noise.shape == features.shape, (features_noise.shape, features.shape)
 
     # reshape / expand dims
     if 2 == features.ndim:
@@ -123,8 +126,11 @@ def load_data(params, logger):
 #       features_test     += features_noise_test
 
     # set dimensions
-    params['data']['num_features'] = features.shape[1:]
+    params['data']['num_features'] = list(features.shape[1:])
     params['data']['num_targets']  = targets.shape[1]
+    if params['data']['features_sub_length'] and \
+       params['data']['features_sub_length'] < params['data']['num_features'][-1]:
+        params['data']['num_features'][-1] = params['data']['features_sub_length']
     logger.debug(f"num_features: {params['data']['num_features']}")
     logger.debug(f"num_targets:  {params['data']['num_targets']}")
 
@@ -201,24 +207,22 @@ def _apply_scale_inverse(data, scale):
         np.add(     data, scale['shift'], out=data)
 
 def preprocess_features(features: dict, params, logger):
-    data_type = params['data']['data_type'].casefold()
+    features_type = params['data']['features_type'].casefold()
     # apply transformation
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type or \
-       'RATE'.casefold()       == data_type:
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
         pass
-    elif 'RATE_DURATION'.casefold() == data_type:
+    elif 'RATE_DURATION'.casefold() == features_type:
         for key in features.keys():
             _log_transform(features[key][...,1], shift=1.0)
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
     # calculate scaling
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
         # nothing to do
         scale = {'shift': 0.0, 'mult': 1.0}
-    elif 'RATE'.casefold()          == data_type or \
-         'RATE_DURATION'.casefold() == data_type:
+    elif 'RATE_DURATION'.casefold() == features_type:
         assert 3 == features['train'].ndim
         assert 1 == features['train'].shape[1]
         features_min  = np.nanmin (features['train'], axis=0, keepdims=True)
@@ -227,24 +231,23 @@ def preprocess_features(features: dict, params, logger):
         features_std  = np.nanstd (features['train'], axis=0, keepdims=True)
         # set scale
         scale = {'shift': features_min, 'mult': (features_max - features_min)}
-        if 'RATE_DURATION'.casefold() == data_type:
+        if 'RATE_DURATION'.casefold() == features_type:
             scale['shift'][...,1] = features_mean[...,1]
             scale['mult'][...,1]  = features_std[...,1]
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
     # apply scaling
     logger.info(f"features scale: {scale}")
     _apply_scale(features, scale)
     # replace nan values
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
        pass
-    elif 'RATE'.casefold()          == data_type or \
-         'RATE_DURATION'.casefold() == data_type:
+    elif 'RATE_DURATION'.casefold() == features_type:
         for key in features.keys():
             features[key] = np.where(np.isnan(features[key]), -1.0, features[key])
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
     # return scale
     return scale
 
@@ -256,16 +259,15 @@ def preprocess_features_noise(features_noise, scale):
         _apply_scale(features_noise, scale)
 
 def postprocess_features(features_predict, scale, params):
-    data_type = params['data']['data_type'].casefold()
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
+    features_type = params['data']['features_type'].casefold()
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
         # apply inverse scaling
         _apply_scale_inverse(features_predict, scale)
-#   elif 'RATE'.casefold()          == data_type or \
-#        'RATE_DURATION'.casefold() == data_type:
+#   elif 'RATE_DURATION'.casefold() == features_type:
 #       TODO
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
 
 def preprocess_targets(targets: dict, params, logger):
     scale = {'shift': 0.0, 'mult': 1.0}
@@ -293,7 +295,7 @@ def _get_positions_from_histogram(data, range, n_bins, relevant_bins_threshold):
     return cond_positions
 
 def get_conditional_positions(features: np.ndarray, params):
-    data_type = params['data']['data_type'].casefold()
+    features_type = params['data']['features_type'].casefold()
     # set function parameters
     fn_params = {
         'n_bins': {
@@ -315,19 +317,10 @@ def get_conditional_positions(features: np.ndarray, params):
     # extract conditional positions
     assert 1 < features.shape[0]
     cond_positions = list()
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
         raise NotImplementedError()
-    elif 'RATE'.casefold()          == data_type:
-        i = 0
-        key = 'RATE'
-        cond_positions.append(_get_positions_from_histogram(
-                features[...,i],
-                fn_params['range'][key],
-                fn_params['n_bins'][key],
-                fn_params['relevant_bins_threshold'][key]
-        ))
-    elif 'RATE_DURATION'.casefold() == data_type:
+    elif 'RATE_DURATION'.casefold() == features_type:
         for i, key in enumerate(['RATE', 'DURATION']):
             cond_positions.append(_get_positions_from_histogram(
                     features[...,i],
@@ -336,7 +329,7 @@ def get_conditional_positions(features: np.ndarray, params):
                     fn_params['relevant_bins_threshold'][key]
             ))
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
     return cond_positions
 
 def _filter_samples(features, targets, position, threshold):
@@ -357,18 +350,17 @@ def _filter_samples(features, targets, position, threshold):
     return features_filtered, targets_filtered
 
 def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position, params):
-    data_type = params['data']['data_type'].casefold()
+    features_type = params['data']['features_type'].casefold()
     # extract conditional samples
     assert 1 < features.shape[0]
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
+    if 'TIME'.casefold()       == features_type or \
+       'TIME_NOISE'.casefold() == features_type:
         raise NotImplementedError()
-    elif 'RATE'.casefold()          == data_type or \
-         'RATE_DURATION'.casefold() == data_type:
+    elif 'RATE_DURATION'.casefold() == features_type:
         threshold = [0.01, 0.10]
         features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
     else:
-        raise ValueError(f"Unknown data_type: {data_type}")
+        raise ValueError(f"Unknown features_type: {features_type}")
     return features_cond, targets_cond
 
 ###############################################################################
@@ -377,7 +369,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 class FHN_Dataset(Dataset):
-    def __init__(self, features, targets, features_noise=None, features_transform_fn=None, item_return_order='yx'):
+    def __init__(self, features, targets, features_noise=None, features_transform_fn=None, item_return_order='yx', features_sub_length=None, features_sub_begin_random=False):
         super().__init__()
         self.features = torch.from_numpy(features)
         self.targets  = torch.from_numpy(targets)
@@ -386,8 +378,10 @@ class FHN_Dataset(Dataset):
             self.features_noise = torch.from_numpy(features_noise)
         else:
             self.features_noise = None
-        self.features_transform_fn = features_transform_fn
-        self.item_return_order = item_return_order.casefold()
+        self.features_transform_fn      = features_transform_fn
+        self.item_return_order          = item_return_order.casefold()
+        self.features_sub_length        = features_sub_length
+        self.features_sub_begin_random  = features_sub_begin_random
 
     def __len__(self):
         return self.features.size(0)
@@ -404,6 +398,15 @@ class FHN_Dataset(Dataset):
             features_transformed = features
         if self.features_transform_fn is not None:
             features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
+        if self.features_sub_length and \
+           self.features_sub_length < features.size(-1):
+            if self.features_sub_begin_random:
+                idx_begin = np.random.randint(features.size(-1) - self.features_sub_length)
+            else:
+                idx_begin = 0
+            idx_end = idx_begin + self.features_sub_length
+            features             = features            [...,idx_begin:idx_end]
+            features_transformed = features_transformed[...,idx_begin:idx_end]
 
         targets = self.targets[idx]
 
@@ -437,20 +440,35 @@ def create_dataloader(params, logger, mode, features, targets,
     # create the dataset
     logger.info('Create new dataset')
     if ModeKeys.TRAIN == mode:
-        dataset = FHN_Dataset(features['train'], targets['train'],
-                              features_noise=features_noise['train'],
-                              features_transform_fn=features_transform_fn,
-                              item_return_order=item_return_order)
+        dataset = FHN_Dataset(
+                features['train'],
+                targets['train'],
+                features_noise=features_noise['train'],
+                features_transform_fn=features_transform_fn,
+                item_return_order=item_return_order,
+                features_sub_length=params['data']['features_sub_length'],
+                features_sub_begin_random=params['data']['features_sub_begin_random']
+        )
     elif ModeKeys.VALIDATE == mode:
-        dataset = FHN_Dataset(features['validate'], targets['validate'],
-                              features_noise=features_noise['validate'],
-                              features_transform_fn=features_transform_fn,
-                              item_return_order=item_return_order)
+        dataset = FHN_Dataset(
+                features['validate'],
+                targets['validate'],
+                features_noise=features_noise['validate'],
+                features_transform_fn=features_transform_fn,
+                item_return_order=item_return_order,
+                features_sub_length=params['data']['features_sub_length'],
+                features_sub_begin_random=params['data']['features_sub_begin_random']
+        )
     else:
-        dataset = FHN_Dataset(features['test'], targets['test'],
-                              features_noise=features_noise['test'],
-                              features_transform_fn=features_transform_fn,
-                              item_return_order=item_return_order)
+        dataset = FHN_Dataset(
+                features['test'],
+                targets['test'],
+                features_noise=features_noise['test'],
+                features_transform_fn=features_transform_fn,
+                item_return_order=item_return_order,
+                features_sub_length=params['data']['features_sub_length'],
+                features_sub_begin_random=params['data']['features_sub_begin_random']
+        )
 
     # create the dataloader
     logger.info('Create new dataloader')
