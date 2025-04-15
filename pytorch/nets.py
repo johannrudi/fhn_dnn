@@ -40,7 +40,7 @@ def _create_MLPNet(params, logger):
         input_size = params['data']['autoencoder_latent_dim']
     else:
         input_size = params['data']['num_features'][1]
-    output_size = params['data']['num_labels']
+    output_size = params['data']['num_targets']
     return MLPNet(
             input_size,
             output_size,
@@ -56,7 +56,7 @@ def _create_MLPResNet(params, logger):
         input_size = params['data']['autoencoder_latent_dim']
     else:
         input_size = params['data']['num_features'][1]
-    output_size = params['data']['num_labels']
+    output_size = params['data']['num_targets']
     return MLPResNet(
             input_size,
             output_size,
@@ -90,7 +90,7 @@ def _create_convNet(params, logger):
             hidden_dense_input_size=n_features,
             hidden_dense_layers_sizes=net_params['dense_layer_sizes'],
             hidden_dense_layers_activation=_get_activation(net_params['activation_fn']),
-            output_size=params['data']['num_labels'],
+            output_size=params['data']['num_targets'],
             output_layer_activation=None,
             use_dropout=net_params['dropout']
     )
@@ -99,7 +99,7 @@ def _create_transformerNet(params, logger):
     net_params = params['net']
     return Transformer1d0dModel(
             params['data']['num_features'][1], # src_size
-            params['data']['num_labels'],      # trg_size
+            params['data']['num_targets'],     # trg_size
             net_params['transformer_embedding_size'],
             net_params['transformer_n_heads'],
             net_params['transformer_feedforward_size'],
@@ -228,7 +228,7 @@ def create_gan(params, logger):
     if NetworkType.MLPNET == g_net_type:
         g_net = MLPNet_MultIn(
             params['data']['num_features'][1] + params['data']['latent_dim'], # input_size
-            params['data']['num_labels'],                                     # output_size
+            params['data']['num_targets'],                                     # output_size
             hidden_layers_sizes      = g_net_params['dense_layer_sizes'],
             hidden_layers_activation = _get_activation(g_net_params['activation_fn']),
             use_dropout              = g_net_params['dropout'],
@@ -243,7 +243,7 @@ def create_gan(params, logger):
     # create discriminator network
     if NetworkType.MLPNET == d_net_type:
         d_net = MLPNet_MultIn(
-            params['data']['num_features'][1] + params['data']['num_labels'], # input_size
+            params['data']['num_features'][1] + params['data']['num_targets'], # input_size
             1,                                                                # output_size
             hidden_layers_sizes      = d_net_params['dense_layer_sizes'],
             hidden_layers_activation = _get_activation(d_net_params['activation_fn']),
@@ -280,7 +280,7 @@ def create_gan(params, logger):
 #
 #        # set output layer
 #        self.output_layer = nn.Sequential(
-#            nn.Linear(in_features, model_params['num_labels']),
+#            nn.Linear(in_features, model_params['num_targets']),
 #            nn.Sigmoid()
 #        ).apply(self.init_weights)
 #
@@ -343,7 +343,7 @@ def create_gan(params, logger):
 #
 #        # set output layer
 #        self.output_layer = nn.Sequential(
-#            nn.Linear(in_features, model_params['num_labels']),
+#            nn.Linear(in_features, model_params['num_targets']),
 #            nn.Sigmoid()
 #        ).apply(self.init_weights)
 #

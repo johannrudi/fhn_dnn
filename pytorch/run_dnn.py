@@ -26,8 +26,8 @@ from data import (
     load_data,
     preprocess_features,
     preprocess_features_noise,
-    preprocess_labels,
-    postprocess_labels,
+    preprocess_targets,
+    postprocess_targets,
     create_dataloader
 )
 from nets import create_dnn, create_ae
@@ -84,7 +84,7 @@ def run(args, params):
 
     # preprocess data
     features_scale = preprocess_features(features, params, logging_get_logger('preprocess_features'))
-    targets_scale  = preprocess_labels  (targets,  params, logging_get_logger('preprocess_labels'))
+    targets_scale  = preprocess_targets  (targets,  params, logging_get_logger('preprocess_targets'))
     preprocess_features_noise(features_noise, features_scale)
 
 ####DEV
@@ -263,8 +263,8 @@ def run(args, params):
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess predictions
-    postprocess_labels(targets, targets_scale)
-    postprocess_labels(targets_predict, targets_scale)
+    postprocess_targets(targets, targets_scale)
+    postprocess_targets(targets_predict, targets_scale)
 
     # compute evaluation metrics
     eval_mse = dict()

@@ -10,44 +10,70 @@ from utils import ModeKeys
 
 ###############################################################################
 
+def _load_numpy(data_type, data_dir):
+    if '2020' in data_dir.name:
+        # load features
+        if 'TIME'.casefold()       == data_type or \
+           'TIME_NOISE'.casefold() == data_type:
+            features = np.load(data_dir/'fhn_T200_samplePrior_state0.npy')
+        elif 'RATE_DURATION'.casefold() == data_type:
+            rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
+            rate = np.expand_dims(rate, axis=1)
+            duration = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
+            duration = np.expand_dims(duration, axis=1)
+            features = np.concatenate([rate, duration], axis=1)
+        else:
+            raise ValueError(f"Unknown data_type: {data_type}")
+        # load features noise
+        if 'TIME_NOISE'.casefold() == data_type:
+            features_noise = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy')
+        else:
+            features_noise = None
+        # load targets
+        targets = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
+    elif '2025' in data_dir.name:
+        # load features
+        if 'TIME'.casefold()       == data_type or \
+           'TIME_NOISE'.casefold() == data_type:
+            state_train = np.load(data_dir/'fhn_Ntrain20000_state_Nt2000_dt0.2.npy')
+            state_test  = np.load(data_dir/'fhn_Ntest2000_state_Nt2000_dt0.2.npy')
+            features    = np.concatenate((state_train[:,0,:], state_test[:,0,:]), axis=0)
+        elif 'RATE_DURATION'.casefold() == data_type:
+            state_stats_train = np.load(data_dir/'fhn_Ntrain20000_state_stats.npy')
+            state_stats_test  = np.load(data_dir/'fhn_Ntest2000_state_stats.npy')
+            features = np.concatenate((state_stats_train, state_stats_test), axis=0)
+        else:
+            raise ValueError(f"Unknown data_type: {data_type}")
+        # load features noise
+        if 'TIME_NOISE'.casefold() == data_type:
+            noise_train = np.load(data_dir/'ar1_Ntrain20000_state_Nt2000_dt0.2.npy')
+            noise_test  = np.load(data_dir/'ar1_Ntest2000_state_Nt2000_dt0.2.npy')
+            features_noise = np.concatenate((noise_train, noise_test), axis=0)
+        else:
+            features_noise = None
+        # load targets
+        param_train = np.load(data_dir/'fhn_Ntrain20000_param.npy')
+        param_test  = np.load(data_dir/'fhn_Ntest2000_param.npy')
+        targets    = np.concatenate((param_train, param_test), axis=0)
+    else:
+        raise NotImplementedError()
+    # return features, noise, and targets
+    return features, targets, features_noise
+
 def load_data(params, logger):
     data_params    = params['data']
     data_type      = params['data']['data_type'].casefold()
+    data_dir       = pathlib.Path(data_params['data_dir'])
 
-    # set directory for data
-    data_dir = pathlib.Path(data_params['data_dir'])
-
-    # load features
-    if 'TIME'.casefold()       == data_type or \
-       'TIME_NOISE'.casefold() == data_type:
-        features = np.load(data_dir/'fhn_T200_samplePrior_state0.npy')
-    elif 'RATE'.casefold() == data_type:
-        rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
-        rate = np.expand_dims(rate, axis=1)
-    elif 'RATE_DURATION'.casefold() == data_type:
-        rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
-        rate = np.expand_dims(rate, axis=1)
-        duration = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
-        duration = np.expand_dims(duration, axis=1)
-        features = np.concatenate([rate, duration], axis=1)
-    else:
-        raise ValueError(f"Unknown data_type: {data_type}")
-
-    # load features noise
-    if 'TIME_NOISE'.casefold() == data_type:
-        features_noise = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy')
-    else:
-        features_noise = None
-
-    # load labels
-    labels = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
+    # load numpy files
+    features, targets, features_noise = _load_numpy(data_type, data_dir)
 
     # print info
     logger.info(f"features shape:       {features.shape}, dtype: {features.dtype}")
-    logger.info(f"labels shape:         {labels.shape}, dtype: {labels.dtype}")
+    logger.info(f"targets shape:        {targets.shape}, dtype: {targets.dtype}")
     if features_noise is not None:
         logger.info(f"features_noise shape: {features_noise.shape}, dtype: {features_noise.dtype}")
-    assert labels.shape[0] == features.shape[0]
+    assert targets.shape[0] == features.shape[0]
     assert features_noise is None or features_noise.shape == features.shape
 
     # reshape / expand dims
@@ -67,17 +93,17 @@ def load_data(params, logger):
 
     # split data into training and testing sets
     features_train    = features[:data_params['Ntrain'],...]
-    labels_train      = labels  [:data_params['Ntrain'],...]
+    targets_train     = targets [:data_params['Ntrain'],...]
     features_validate = features[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-    labels_validate   = labels  [data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
+    targets_validate  = targets [data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
     features_test     = features[-data_params['Ntest']:,...]
-    labels_test       = labels  [-data_params['Ntest']:,...]
+    targets_test      = targets [-data_params['Ntest']:,...]
     logger.info(f"features_train_shape:    {features_train.shape}")
     logger.info(f"features_validate_shape: {features_validate.shape}")
     logger.info(f"features_test_shape:     {features_test.shape}")
-    logger.info(f"labels_train_shape:      {labels_train.shape}")
-    logger.info(f"labels_validate_shape:   {labels_validate.shape}")
-    logger.info(f"labels_test_shape:       {labels_test.shape}")
+    logger.info(f"targets_train_shape:     {targets_train.shape}")
+    logger.info(f"targets_validate_shape:  {targets_validate.shape}")
+    logger.info(f"targets_test_shape:      {targets_test.shape}")
     if features_noise is not None:
         features_noise_train    = features_noise[:data_params['Ntrain'],...]
         features_noise_validate = features_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
@@ -98,9 +124,9 @@ def load_data(params, logger):
 
     # set dimensions
     params['data']['num_features'] = features.shape[1:]
-    params['data']['num_labels']   = labels.shape[1]
+    params['data']['num_targets']  = targets.shape[1]
     logger.debug(f"num_features: {params['data']['num_features']}")
-    logger.debug(f"num_labels:   {params['data']['num_labels']}")
+    logger.debug(f"num_targets:  {params['data']['num_targets']}")
 
     # bundle arrays
     features = {
@@ -108,10 +134,10 @@ def load_data(params, logger):
         'validate': features_validate,
         'test':     features_test,
     }
-    labels = {
-        'train':    labels_train,
-        'validate': labels_validate,
-        'test':     labels_test,
+    targets = {
+        'train':    targets_train,
+        'validate': targets_validate,
+        'test':     targets_test,
     }
     if features_noise_train is not None and \
        features_noise_validate is not None and \
@@ -128,7 +154,7 @@ def load_data(params, logger):
             'test':     None,
         }
 
-    return features, labels, features_noise
+    return features, targets, features_noise
 
 def load_timesteps(params):
     data_params = params['data']
@@ -241,17 +267,17 @@ def postprocess_features(features_predict, scale, params):
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
 
-def preprocess_labels(labels: dict, params, logger):
+def preprocess_targets(targets: dict, params, logger):
     scale = {'shift': 0.0, 'mult': 1.0}
     # apply scaling
-    logger.info(f"labels scale: {scale}")
-    _apply_scale(labels, scale)
+    logger.info(f"targets scale: {scale}")
+    _apply_scale(targets, scale)
     # return scale
     return scale
 
-def postprocess_labels(labels_predict, scale):
+def postprocess_targets(targets_predict, scale):
     # apply inverse scaling
-    _apply_scale_inverse(labels_predict, scale)
+    _apply_scale_inverse(targets_predict, scale)
 
 ###############################################################################
 

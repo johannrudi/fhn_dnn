@@ -28,8 +28,8 @@ from data import (
     preprocess_features,
     preprocess_features_noise,
     postprocess_features,
-    preprocess_labels,
-    postprocess_labels,
+    preprocess_targets,
+    postprocess_targets,
     create_dataloader
 )
 from nets import create_ae
@@ -86,7 +86,7 @@ def run(args, params):
 
     # preprocess data
     features_scale = preprocess_features(features, params, logging_get_logger('preprocess_features'))
-    targets_scale  = preprocess_labels  (targets,  params, logging_get_logger('preprocess_labels'))
+    targets_scale  = preprocess_targets  (targets,  params, logging_get_logger('preprocess_targets'))
     preprocess_features_noise(features_noise, features_scale)
 
     # create dataloader
