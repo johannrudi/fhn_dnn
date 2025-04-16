@@ -183,16 +183,14 @@ def run(args, params):
 
     # compute predictions
     time_eval = timeit.default_timer()
-    eval_features_pred = evaluate(net, eval_dataloader, params)
+    eval_features_pred, eval_features_data = predict(net, eval_dataloader, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess evaluation data
     if dictarray_is_not_none(features):
-        eval_features_data = features
         postprocess_features(eval_features_data, features_scale, params)
         postprocess_features(eval_features_pred, features_scale, params)
     elif dictarray_is_not_none(features_noise):
-        eval_features_data = features_noise
         postprocess_features(eval_features_data, features_noise_scale, params)
         postprocess_features(eval_features_pred, features_noise_scale, params)
     else:
@@ -204,15 +202,8 @@ def run(args, params):
             eval_features_data, eval_features_pred, percentiles)
 
     # compute evaluation metrics
-    eval_mse = dict()
-    eval_mae = dict()
-    eval_r2  = dict()
+    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(eval_features_data, eval_features_pred)
     for key in eval_features_data.keys():
-        y_data = eval_features_data[key].squeeze()
-        y_pred = eval_features_pred[key].squeeze()
-        eval_mse[key] = metrics.mean_squared_error(y_data, y_pred)
-        eval_mae[key] = metrics.mean_absolute_error(y_data, y_pred)
-        eval_r2[key]  = metrics.r2_score(y_data, y_pred)
         logger.info(f"Evaluate - MSE ({key}):      {eval_mse[key]}")
         logger.info(f"Evaluate - MAE ({key}):      {eval_mae[key]}")
         logger.info(f"Evaluate - R2 score ({key}): {eval_r2[key]}")
@@ -246,7 +237,6 @@ def run(args, params):
               loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
 
     # plot predictions percentiles
-    timesteps = load_timesteps(params)
     for key in eval_features_data.keys():
         # skip if no samples exist
         if params['data']['N'+key] <= 0:
@@ -261,16 +251,15 @@ def run(args, params):
             y_data = eval_features_data_percentiles[key][i]
             y_pred = eval_features_pred_percentiles[key][i]
             y_mse  = np.mean((y_pred - y_data)**2)
-            ax[i].plot(timesteps, y_data, label=f"data ({key})",
+            ax[i].plot(y_data, label=f"data ({key})",
                        color='tab:orange', linewidth=0, marker='.', markersize=6)
-            ax[i].plot(timesteps, y_pred, label=f"MSE={y_mse:.3e}",
+            ax[i].plot(y_pred, label=f"MSE={y_mse:.3e}",
                        color='tab:blue', linewidth=2)
-            ax[i].set_xlim([timesteps[0], timesteps[-1]])
             ax[i].set_ylim(y_lim)
             ax[i].set_ylabel(f"{int(percentiles[i]*100):d}%")
             ax[i].legend(loc='center left', bbox_to_anchor=(1, 0.5), fancybox=True)
             ax[i].grid()
-        ax[-1].set_xlabel('time [milliseconds]')
+        ax[-1].set_xlabel('time step')
         fig.tight_layout()
         path = os.path.join(self_dir, params['runconfig']['save_dir'], 'predict_mse_percentiles_'+key)
         fig.savefig(f"{path}.pdf", dpi=300)
@@ -281,21 +270,36 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, eval_dataloader, params):
+def predict(net, eval_dataloader, params):
     net.eval()
-    # evaluate network predictions
-    y_predict = dict()
+    # get network predictions
+    data = dict()
+    pred = dict()
     with torch.no_grad():
         for key in eval_dataloader.keys():
-            y_list = list()
-            for data in eval_dataloader[key]:
-                x, _ = data
+            d_list = list()
+            p_list = list()
+            for x, yd in eval_dataloader[key]:
                 x = x.to(device)
-                y = net(x)
-                y_list.append(y.cpu().numpy())
-            y_predict[key] = np.concatenate(y_list, axis=0)
-    # return predictions
-    return y_predict
+                yp = net(x)
+                d_list.append(yd.cpu().numpy())
+                p_list.append(yp.cpu().numpy())
+            data[key] = np.concatenate(d_list, axis=0)
+            pred[key] = np.concatenate(p_list, axis=0)
+    # return predictions and (true) data
+    return pred, data
+
+def eval_data_vs_pred(data, pred):
+    eval_mse = dict()
+    eval_mae = dict()
+    eval_r2  = dict()
+    for key in data.keys():
+        data_ = data[key].squeeze()
+        pred_ = pred[key].squeeze()
+        eval_mse[key] = metrics.mean_squared_error(data_, pred_)
+        eval_mae[key] = metrics.mean_absolute_error(data_, pred_)
+        eval_r2[key]  = metrics.r2_score(data_, pred_)
+    return eval_mse, eval_mae, eval_r2
 
 def get_mse_percentiles(features_data, features_pred, percentiles):
     features_percentiles         = dict()

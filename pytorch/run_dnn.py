@@ -273,43 +273,28 @@ def run(args, params):
 
     # compute predictions
     time_eval = timeit.default_timer()
-    eval_targets_pred = evaluate(net, eval_dataloader, params, features_transform_fn=features_transform_fn)
+    eval_targets_pred, eval_targets_data = predict(net, eval_dataloader, params, features_transform_fn=features_transform_fn)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess evaluation data
     if dictarray_is_not_none(targets) and dictarray_is_not_none(targets_noise):
-        eval_targets_data = {}
-        for key in targets.keys():
-            eval_targets_data[key] = np.concatenate((targets[key], targets_noise[key]), axis=1)
         eval_targets_scale = {}
         for key in targets_scale.keys():
             eval_targets_scale[key] = np.concatenate((targets_scale[key], targets_noise_scale[key]), axis=1)
         postprocess_targets(eval_targets_data, eval_targets_scale)
         postprocess_targets(eval_targets_pred, eval_targets_scale)
     elif dictarray_is_not_none(targets):
-        eval_targets_data = targets
         postprocess_targets(eval_targets_data, targets_scale)
         postprocess_targets(eval_targets_pred, targets_scale)
     elif dictarray_is_not_none(targets_noise):
-        eval_targets_data = targets_noise
         postprocess_targets(eval_targets_data, targets_noise_scale)
         postprocess_targets(eval_targets_pred, targets_noise_scale)
     else:
         raise NotImplementedError()
 
     # compute evaluation metrics
-    eval_mse = dict()
-    eval_mae = dict()
-    eval_r2  = dict()
+    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(eval_features_data, eval_features_pred)
     for key in eval_targets_data.keys():
-        y_data = eval_targets_data[key]
-        y_pred = eval_targets_pred[key]
-        eval_mse[key+'_i'] = [metrics.mean_squared_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
-        eval_mse[key     ] =  metrics.mean_squared_error(y_data, y_pred)
-        eval_mae[key+'_i'] = [metrics.mean_absolute_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
-        eval_mae[key     ] =  metrics.mean_absolute_error(y_data, y_pred)
-        eval_r2[key+'_i']  = [metrics.r2_score(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
-        eval_r2[key     ]  =  metrics.r2_score(y_data, y_pred)
         logger.info(f"Evaluate - MSE ({key}):      " + str(eval_mse[key+'_i']) + f" {eval_mse[key]}")
         logger.info(f"Evaluate - MAE ({key}):      " + str(eval_mae[key+'_i']) + f" {eval_mae[key]}")
         logger.info(f"Evaluate - R2 score ({key}): " + str(eval_r2[key+'_i'])  + f" {eval_r2[key]}")
@@ -372,23 +357,41 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, eval_dataloader, params, features_transform_fn=None):
+def predict(net, eval_dataloader, params, features_transform_fn=None):
     net.eval()
-    # evaluate network predictions
-    y_predict = dict()
+    # get network predictions
+    data = dict()
+    pred = dict()
     with torch.no_grad():
         for key in eval_dataloader.keys():
-            y_list = list()
-            for data in eval_dataloader[key]:
-                x, _ = data
+            d_list = list()
+            p_list = list()
+            for x, yd in eval_dataloader[key]:
                 x = x.to(device)
                 if features_transform_fn is not None:
                     x = features_transform_fn(x)
-                y = net(x)
-                y_list.append(y.cpu().numpy())
-            y_predict[key] = np.concatenate(y_list, axis=0)
-    # return predictions
-    return y_predict
+                yp = net(x)
+                d_list.append(yd.cpu().numpy())
+                p_list.append(yp.cpu().numpy())
+            data[key] = np.concatenate(d_list, axis=0)
+            pred[key] = np.concatenate(p_list, axis=0)
+    # return predictions and (true) data
+    return pred, data
+
+def eval_data_vs_pred(data, pred):
+    eval_mse = dict()
+    eval_mae = dict()
+    eval_r2  = dict()
+    for key in data.keys():
+        data_ = data[key]
+        pred_ = pred[key]
+        eval_mse[key+'_i'] = [metrics.mean_squared_error(data_[:,i], pred_[:,i]) for i in range(data_.shape[1])]
+        eval_mse[key     ] =  metrics.mean_squared_error(data_, pred_)
+        eval_mae[key+'_i'] = [metrics.mean_absolute_error(data_[:,i], pred_[:,i]) for i in range(data_.shape[1])]
+        eval_mae[key     ] =  metrics.mean_absolute_error(data_, pred_)
+        eval_r2[key+'_i']  = [metrics.r2_score(data_[:,i], pred_[:,i]) for i in range(data_.shape[1])]
+        eval_r2[key     ]  =  metrics.r2_score(data_, pred_)
+    return eval_mse, eval_mae, eval_r2
 
 ###############################################################################
 
