@@ -4,11 +4,11 @@ data:
     data_dir:  '../data/2025-04-11' # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION', 'NOISE'
     features_sub_length: 1000       # use sub interval of this size
-    features_sub_begin_random: False # flag to pick a sub interval at random
+    features_sub_begin_random: True # flag to pick a sub interval at random
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntrain:    1024
-    Nvalidate: 2000
-   #Ntest:     2000
+    Nvalidate: 1000
+    Ntest:     2000
     train_shuffle_buffer_size: 1000
     train_batch_size: 256
     eval_batch_size:  256
@@ -27,10 +27,6 @@ net:
         - 32
 
     dense_layer_sizes:
-        - 128
-        - 128
-        - 128
-        - 128
         - 128
         - 128
         - 128

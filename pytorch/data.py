@@ -36,13 +36,13 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
             features_     = np.expand_dims( np.load(data_dir/'fhn_T200_samplePrior_state0.npy'), axis=1 )
-            features_     = features_[:Ntest,...]
+            features_     = features_[:-Ntest,...]
             features_test = features_[-Ntest:,...]
         elif features_type == 'RATE_DURATION'.casefold():
             rate          = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
             duration      = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
             features_     = np.expand_dims( np.stack((rate, duration), axis=1), axis=1 )
-            features_     = features_[:Ntest,...]
+            features_     = features_[:-Ntest,...]
             features_test = features_[-Ntest:,...]
         elif features_type == 'NOISE'.casefold():
             pass
@@ -51,7 +51,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
             targets_     = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
-            targets_     = targets_[:Ntest,...]
+            targets_     = targets_[:-Ntest,...]
             targets_test = targets_[-Ntest:,...]
         elif targets_type == 'NOISE'.casefold():
             pass
@@ -60,7 +60,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
         # load features noise
         if features_type in ['TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
             features_noise_     = np.expand_dims( np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy'), axis=1 )
-            features_noise_     = features_noise_[:Ntest,...]
+            features_noise_     = features_noise_[:-Ntest,...]
             features_noise_test = features_noise_[-Ntest:,...]
         elif features_type in ['TIME'.casefold(), 'RATE_DURATION'.casefold()]:
             pass
@@ -71,7 +71,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
             noise_correl       = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_correlation.npy')
             noise_stddev       = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_stddev.npy')
             targets_noise_     = np.stack((noise_correl, noise_stddev), axis=1)
-            targets_noise_     = targets_noise_[:Ntest,...]
+            targets_noise_     = targets_noise_[:-Ntest,...]
             targets_noise_test = targets_noise_[-Ntest:,...]
         elif targets_type == 'ODE'.casefold():
             pass
@@ -221,152 +221,116 @@ def _log_transform(data, shift=0.0):
     """ Applies log-transform for preprocessing. """
     if isinstance(data, dict):
         for key in data.keys():
-            np.log(shift + data[key], out=data[key])
+            data[key] = np.log(shift + data[key])
     else:
-        np.log(shift + data, out=data)
+        data = np.log(shift + data)
 
 def _log_transform_inverse(data, shift=0.0):
     """ Applies inverse of log-transform for postprocessing. """
     if isinstance(data, dict):
         for key in data.keys():
-            np.exp(data[key], out=data[key])
-            np.add(data[key], -shift, out=data[key])
+            data[key] = np.exp(data[key]) - shift
     else:
-        np.exp(data, out=data)
-        np.add(data, -shift, out=data)
+        data = np.exp(data) - shift
 
 def _apply_scale(data, scale):
     """ Applies scale for preprocessing. """
     if isinstance(data, dict):
         for key in data.keys():
-            np.add(     data[key], -scale['shift'],   out=data[key])
-            np.multiply(data[key], 1.0/scale['mult'], out=data[key])
+            data[key] = (data[key] - scale['shift']) * (1.0/scale['mult'])
     else:
-        np.add(     data, -scale['shift'],   out=data)
-        np.multiply(data, 1.0/scale['mult'], out=data)
+        data = (data - scale['shift']) * (1.0/scale['mult'])
 
 def _apply_scale_inverse(data, scale):
     """ Applies inverse scale for postprocessing. """
     if isinstance(data, dict):
         for key in data.keys():
-            np.multiply(data[key], scale['mult'],  out=data[key])
-            np.add(     data[key], scale['shift'], out=data[key])
+            data[key] = data[key] * scale['mult'] + scale['shift']
     else:
-        np.multiply(data, scale['mult'],  out=data)
-        np.add(     data, scale['shift'], out=data)
+        data = data * scale['mult'] + scale['shift']
 
-def preprocess_features(features: dict, params, logger):
+def preprocess_features(features, params, logger, scale=None, array_name='features'):
     # exit if nothing to do
-    if features is None or (isinstance(features, dict) and dictarray_is_none(features)):
+    if dictarray_is_none(features):
         return None
     features_type = params['data']['features_type'].casefold()
     # apply transformation
-    if 'TIME'.casefold()       == features_type or \
-       'TIME_NOISE'.casefold() == features_type:
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
         pass
-    elif 'RATE_DURATION'.casefold() == features_type:
+    elif features_type == 'RATE_DURATION'.casefold():
         for key in features.keys():
             _log_transform(features[key][...,1], shift=1.0)
     else:
-        raise ValueError(f"Unknown features_type: {features_type}")
+        raise NotImplementedError(f"Unknown {features_type=}")
     # calculate scaling
-    if 'TIME'.casefold()       == features_type or \
-       'TIME_NOISE'.casefold() == features_type:
-        # nothing to do
-        scale = {'shift': 0.0, 'mult': 1.0}
-    elif 'RATE_DURATION'.casefold() == features_type:
-        assert 3 == features['train'].ndim
-        assert 1 == features['train'].shape[1]
-        features_min  = np.nanmin (features['train'], axis=0, keepdims=True)
-        features_max  = np.nanmax (features['train'], axis=0, keepdims=True)
-        features_mean = np.nanmean(features['train'], axis=0, keepdims=True)
-        features_std  = np.nanstd (features['train'], axis=0, keepdims=True)
-        # set scale
-        scale = {'shift': features_min, 'mult': (features_max - features_min)}
-        if 'RATE_DURATION'.casefold() == features_type:
-            scale['shift'][...,1] = features_mean[...,1]
-            scale['mult'][...,1]  = features_std[...,1]
-    else:
-        raise ValueError(f"Unknown features_type: {features_type}")
+    if scale is None:
+        if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+            scale = {'shift': 0.0, 'mult': 1.0}
+        elif features_type == 'RATE_DURATION'.casefold():
+            assert 3 == features['train'].ndim
+            assert 1 == features['train'].shape[1]
+            features_min  = np.nanmin (features['train'], axis=0, keepdims=True)
+            features_max  = np.nanmax (features['train'], axis=0, keepdims=True)
+            features_mean = np.nanmean(features['train'], axis=0, keepdims=True)
+            features_std  = np.nanstd (features['train'], axis=0, keepdims=True)
+            # set scale
+            scale = {'shift': features_min, 'mult': (features_max - features_min)}
+            if 'RATE_DURATION'.casefold() == features_type:
+                scale['shift'][...,1] = features_mean[...,1]
+                scale['mult'][...,1]  = features_std[...,1]
+        else:
+            raise NotImplementedError(f"Unknown {features_type=}")
     # apply scaling
-    logger.info(f"features scale: {scale}")
+    logger.info(f"{array_name} scale = {scale}")
     _apply_scale(features, scale)
     # replace nan values
-    if 'TIME'.casefold()       == features_type or \
-       'TIME_NOISE'.casefold() == features_type:
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
        pass
-    elif 'RATE_DURATION'.casefold() == features_type:
+    elif features_type == 'RATE_DURATION'.casefold():
         for key in features.keys():
             features[key] = np.where(np.isnan(features[key]), -1.0, features[key])
     else:
-        raise ValueError(f"Unknown features_type: {features_type}")
+        raise NotImplementedError(f"Unknown {features_type=}")
     # return scale
     return scale
 
-def postprocess_features(features_predict, scale, params):
+def postprocess_features(features, scale, params):
     # exit if nothing to do
-    if features_predict is None or (isinstance(features_predict, dict) and dictarray_is_none(features_predict)):
+    if dictarray_is_none(features):
         return
     features_type = params['data']['features_type'].casefold()
-    if 'TIME'.casefold()       == features_type or \
-       'TIME_NOISE'.casefold() == features_type:
-        # apply inverse scaling
-        _apply_scale_inverse(features_predict, scale)
-#   elif 'RATE_DURATION'.casefold() == features_type:
-#       TODO
+    # apply inverse scaling
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+        _apply_scale_inverse(features, scale)
+    elif features_type == 'RATE_DURATION'.casefold():
+        _apply_scale_inverse(features, scale)
+        #TODO apply inverse transforms
+        raise NotImplementedError()
     else:
-        raise ValueError(f"Unknown features_type: {features_type}")
+        raise NotImplementedError(f"Unknown {features_type=}")
 
-def _preprocess_array(arr, arr_name, params, logger, scale=None):
+def preprocess_targets(targets, params, logger, scale=None, array_name='targets'):
     # exit if nothing to do
-    if arr is None or (isinstance(arr, dict) and dictarray_is_none(arr)):
+    if dictarray_is_none(targets):
         return None
-    # set scaling to no-op.
+    # calculate scaling
     if scale is None:
-        scale = {'shift': 0.0, 'mult': 1.0}
+        scale = {
+            'shift': np.mean(targets['train'], axis=0, keepdims=True),
+            'mult' : np.std (targets['train'], axis=0, keepdims=True)
+        }
     # apply scaling
-    logger.info(f"{arr_name} scale: {scale}")
-    _apply_scale(arr, scale)
+    logger.info(f"{array_name} scale = {scale}")
+    _apply_scale(targets, scale)
     # return scale
     return scale
 
-def _postprocess_array(arr, scale):
+def postprocess_targets(targets, scale):
     # exit if nothing to do
-    if arr is None or (isinstance(arr, dict) and dictarray_is_none(arr)):
-        return
+    if dictarray_is_none(targets):
+        return None
     # apply inverse scaling
-    _apply_scale_inverse(arr, scale)
-
-def preprocess_targets(targets, params, logger, scale=None):
-    # exit if nothing to do
-    if targets is None or (isinstance(targets, dict) and dictarray_is_none(targets)):
-        return None
-    # calculate scaling
-    if scale is None:
-        mean  = np.nanmean(targets['train'], axis=0, keepdims=True)
-        std   = np.nanstd (targets['train'], axis=0, keepdims=True)
-        scale = {'shift': mean, 'mult': std}
-    return _preprocess_array(targets, 'targets', params, logger, scale)
-
-def postprocess_targets(targets_predict, scale):
-    return _postprocess_array(targets_predict, scale)
-
-def preprocess_features_noise(features_noise, params, logger, scale=None):
-    return _preprocess_array(features_noise, 'features_noise', params, logger, scale)
-
-def preprocess_targets_noise(targets_noise, params, logger, scale=None):
-    # exit if nothing to do
-    if targets_noise is None or (isinstance(targets_noise, dict) and dictarray_is_none(targets_noise)):
-        return None
-    # calculate scaling
-    if scale is None:
-        mean  = np.nanmean(targets_noise['train'], axis=0, keepdims=True)
-        std   = np.nanstd (targets_noise['train'], axis=0, keepdims=True)
-        scale = {'shift': mean, 'mult': std}
-    return _preprocess_array(targets_noise, 'targets_noise', params, logger, scale)
-
-def postprocess_targets_noise(targets_noise_predict, scale):
-    return _postprocess_array(targets_noise_predict, scale)
+    _apply_scale_inverse(targets, scale)
 
 ###############################################################################
 
@@ -560,54 +524,37 @@ def create_dataloader(params, logger, mode,
                       features, targets,
                       features_noise, targets_noise,
                       features_transform_fn=None,
-                      item_return_order='yx',
-                      dataloader_kwargs={'shuffle':True, 'drop_last':False}):
+                      item_return_order='yx'):
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
-    if ModeKeys.TRAIN == mode or \
-       ModeKeys.VALIDATE == mode:
-        batch_size = params['data']['train_batch_size']
+    if ModeKeys.TRAIN == mode:
+        dataset_kwargs    = {'noise_idx_random': True}
+        dataloader_kwargs = {'shuffle': True, 'drop_last': False,
+                             'batch_size': params['data']['train_batch_size']}
+    elif ModeKeys.VALIDATE == mode or ModeKeys.EVAL == mode:
+        dataset_kwargs    = {'noise_idx_random': False}
+        dataloader_kwargs = {'shuffle': False, 'drop_last': False,
+                             'batch_size': params['data']['eval_batch_size']}
     else:
-        batch_size = params['data']['eval_batch_size']
-
-    # set common arguments of dataset
-    dataset_kwargs = {
-        'features_transform_fn'    : features_transform_fn,
-        'features_sub_length'      : params['data']['features_sub_length'],
-        'features_sub_begin_random': params['data']['features_sub_begin_random'],
-        'item_return_order'        : item_return_order
-    }
-    if dataloader_kwargs['shuffle']:
-        dataset_kwargs['noise_idx_random'] = True
-    else:
-        dataset_kwargs['noise_idx_random'] = False
+        raise NotImplementedError()
 
     # create the dataset
     logger.info('Create new dataset')
-    if ModeKeys.TRAIN == mode:
-        dataset = FHN_Dataset(features['train'],
-                              targets['train'],
-                              features_noise = features_noise['train'],
-                              targets_noise  = targets_noise['train'],
-                              **dataset_kwargs)
-    elif ModeKeys.VALIDATE == mode:
-        dataset = FHN_Dataset(features['validate'],
-                              targets['validate'],
-                              features_noise = features_noise['validate'],
-                              targets_noise  = targets_noise['validate'],
-                              **dataset_kwargs)
-    else:
-        dataset = FHN_Dataset(features['test'],
-                              targets['test'],
-                              features_noise = features_noise['test'],
-                              targets_noise  = targets_noise['test'],
-                              **dataset_kwargs)
+    dataset = FHN_Dataset(
+            features, targets,
+            features_noise = features_noise,
+            targets_noise  = targets_noise,
+            features_transform_fn     = features_transform_fn,
+            features_sub_length       = params['data']['features_sub_length'],
+            features_sub_begin_random = params['data']['features_sub_begin_random'],
+            item_return_order         = item_return_order,
+            **dataset_kwargs
+    )
 
     # create the dataloader
     logger.info('Create new dataloader')
-    dataloader = DataLoader(dataset, batch_size=batch_size, **dataloader_kwargs)
+    dataloader = DataLoader(dataset, **dataloader_kwargs)
 
     # output
     return dataloader
-

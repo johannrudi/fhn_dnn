@@ -26,9 +26,8 @@ from data import (
     dictarray_is_not_none,
     load_data,
     preprocess_features,
-    preprocess_targets, postprocess_targets,
-    preprocess_features_noise,
-    preprocess_targets_noise, postprocess_targets_noise,
+    preprocess_targets,
+    postprocess_targets,
     create_dataloader
 )
 from nets import create_dnn, create_ae
@@ -85,9 +84,13 @@ def run(args, params):
 
     # preprocess data
     features_scale = preprocess_features(features, params, logging_get_logger('preprocess_features'))
-    targets_scale  = preprocess_targets (targets,  params, logging_get_logger('preprocess_targets'))
-    features_noise_scale = preprocess_features_noise(features_noise, params, logging_get_logger('preprocess_features_noise'), features_scale)
-    targets_noise_scale  = preprocess_targets_noise (targets_noise,  params, logging_get_logger('preprocess_targets_noise'))
+    targets_scale = preprocess_targets(targets, params, logging_get_logger('preprocess_targets'))
+    features_noise_scale = preprocess_features(features_noise, params,
+                                               logging_get_logger('preprocess_features_noise'),
+                                               scale=features_scale, array_name='features_noise')
+    targets_noise_scale = preprocess_targets(targets_noise, params,
+                                             logging_get_logger('preprocess_targets_noise'),
+                                             array_name='targets_noise')
 
 ####DEV
     if params['data']['autoencoder_load_dir']:
@@ -126,14 +129,22 @@ def run(args, params):
 ####/DEV
 
     # create dataloader
+    if ModeKeys.TRAIN == mode:
+        mode_to_data_key = 'train'
+    elif ModeKeys.VALIDATE == mode:
+        mode_to_data_key = 'validate'
+    elif ModeKeys.EVAL == mode:
+        mode_to_data_key = 'test'
+    else:
+        raise NotImplementedError()
     dataloader = create_dataloader(
             params,
             logging_get_logger('create_dataloader'),
             mode,
-            features          = features,
-            targets           = targets,
-            features_noise    = features_noise,
-            targets_noise     = targets_noise,
+            features          = features[mode_to_data_key],
+            targets           = targets[mode_to_data_key],
+            features_noise    = features_noise[mode_to_data_key],
+            targets_noise     = targets_noise[mode_to_data_key],
             item_return_order = 'yx'
     )
 
@@ -247,54 +258,51 @@ def run(args, params):
     print('<evaluate>')
 
     # create dataloaders
-    dataloader_eval = dict()
-    for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
-        dataloader_eval[key] = create_dataloader(
+    eval_dataloader = dict()
+    for key in features.keys():
+        eval_dataloader[key] = create_dataloader(
                 params,
                 logging_get_logger('create_dataloader'),
-                dl_mode,
-                features          = features,
-                targets           = targets,
-                features_noise    = features_noise,
-                targets_noise     = targets_noise,
-                item_return_order = 'yx',
-                dataloader_kwargs = {'shuffle':False, 'drop_last':False}
+                ModeKeys.EVAL,
+                features          = features[key],
+                targets           = targets[key],
+                features_noise    = features_noise[key],
+                targets_noise     = targets_noise[key],
+                item_return_order = 'yx'
         )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    targets_predict = evaluate(net, dataloader_eval, params, features_transform_fn=features_transform_fn)
+    eval_targets_pred = evaluate(net, eval_dataloader, params, features_transform_fn=features_transform_fn)
     time_eval = timeit.default_timer() - time_eval
 
-    # set up evaluation data
-    if dictarray_is_not_none(targets) and \
-       dictarray_is_not_none(targets_noise):
-        targets_data = {}
-        for key in ['train', 'validate', 'test']:
-            targets_data[key] = np.concatenate((targets[key], targets_noise[key]), axis=1)
+    # postprocess evaluation data
+    if dictarray_is_not_none(targets) and dictarray_is_not_none(targets_noise):
+        eval_targets_data = {}
+        for key in targets.keys():
+            eval_targets_data[key] = np.concatenate((targets[key], targets_noise[key]), axis=1)
+        eval_targets_scale = {}
+        for key in targets_scale.keys():
+            eval_targets_scale[key] = np.concatenate((targets_scale[key], targets_noise_scale[key]), axis=1)
+        postprocess_targets(eval_targets_data, eval_targets_scale)
+        postprocess_targets(eval_targets_pred, eval_targets_scale)
     elif dictarray_is_not_none(targets):
-        targets_data = targets
+        eval_targets_data = targets
+        postprocess_targets(eval_targets_data, targets_scale)
+        postprocess_targets(eval_targets_pred, targets_scale)
     elif dictarray_is_not_none(targets_noise):
-        targets_data = targets_noise
-
-    # postprocess predictions
-    if dictarray_is_not_none(targets):
-        n_targets = targets['train'].shape[1]
-        for key in ['train', 'validate', 'test']:
-            postprocess_targets(targets_data[key][:,:n_targets],    targets_scale)
-            postprocess_targets(targets_predict[key][:,:n_targets], targets_scale)
-    if dictarray_is_not_none(targets_noise):
-        n_targets_noise = targets_noise['train'].shape[1]
-        for key in ['train', 'validate', 'test']:
-            postprocess_targets_noise(targets_data[key][:,-n_targets_noise:],    targets_noise_scale)
-            postprocess_targets_noise(targets_predict[key][:,-n_targets_noise:], targets_noise_scale)
+        eval_targets_data = targets_noise
+        postprocess_targets(eval_targets_data, targets_noise_scale)
+        postprocess_targets(eval_targets_pred, targets_noise_scale)
+    else:
+        raise NotImplementedError()
 
     # compute evaluation metrics
     eval_mse = dict()
     eval_r2  = dict()
-    for key in ['train', 'validate', 'test']:
-        y_data = targets_data[key]
-        y_pred = targets_predict[key]
+    for key in eval_targets_data.keys():
+        y_data = eval_targets_data[key]
+        y_pred = eval_targets_pred[key]
         eval_mse[key]        = [metrics.mean_squared_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
         eval_mse[key+'_all'] =  metrics.mean_squared_error(y_data, y_pred)
         eval_r2[key]        = [metrics.r2_score(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
@@ -332,25 +340,27 @@ def run(args, params):
 
     # plot predictions
     for key in ['train', 'validate', 'test']:
+        # skip if no samples exist
         if params['data']['N'+key] <= 0:
             continue
-        n_targets_data       = targets_data[key].shape[1]
-        targets_plot         = [targets_data[key][:,i]    for i in range(n_targets_data)]
-        targets_predict_plot = [targets_predict[key][:,i] for i in range(n_targets_data)]
+        # set up plotting
+        assert eval_targets_data[key].shape[1] == eval_targets_pred[key].shape[1]
+        ntrg = eval_targets_data[key].shape[1]
+        plot_targets_data = [eval_targets_data[key][:,i] for i in range(ntrg)]
+        plot_targets_pred = [eval_targets_pred[key][:,i] for i in range(ntrg)]
+        plot_name         = [f"param_{i}" for i in range(ntrg)]
         # plot true values vs. predictions
         path = os.path.join(self_dir, params['runconfig']['save_dir'], 'data_vs_predict_'+key)
-        plot_data_vs_predict(
-                targets_plot, targets_predict_plot, path,
-                plot_name=[f"param_{i}" for i in range(n_targets_data)],
-                x_label=n_targets_data*[f"{key} value"],
-                y_label=n_targets_data*[f"predicted value"])
+        plot_data_vs_predict(plot_targets_data, plot_targets_pred, path,
+                             plot_name=plot_name,
+                             x_label=ntrg*[f"{key} value"],
+                             y_label=ntrg*[f"predicted value"])
         # plot prediction errors
         path = os.path.join(self_dir, params['runconfig']['save_dir'], 'predict_error_'+key)
-        plot_data_vs_predict_error(
-                targets_plot, targets_predict_plot, path,
-                plot_name=[f"param_{i}" for i in range(n_targets_data)],
-                x_label=n_targets_data*[f"{key} value"],
-                y_label=n_targets_data*[f"prediction error"])
+        plot_data_vs_predict_error(plot_targets_data, plot_targets_pred, path,
+                                   plot_name=plot_name,
+                                   x_label=ntrg*[f"{key} value"],
+                                   y_label=ntrg*[f"prediction error"])
 
     # show plots
     if params['runconfig']['show_plots']:
@@ -358,14 +368,14 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, dataloader_eval, params, features_transform_fn=None):
+def evaluate(net, eval_dataloader, params, features_transform_fn=None):
     net.eval()
     # evaluate network predictions
     y_predict = dict()
     with torch.no_grad():
-        for key in dataloader_eval.keys():
+        for key in eval_dataloader.keys():
             y_list = list()
-            for data in dataloader_eval[key]:
+            for data in eval_dataloader[key]:
                 x, _ = data
                 x = x.to(device)
                 if features_transform_fn is not None:
