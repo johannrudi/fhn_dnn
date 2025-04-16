@@ -23,13 +23,11 @@ from utils import (
     plot_data_vs_predict_error
 )
 from data import (
+    dictarray_is_not_none,
     load_data,
     load_timesteps,
     preprocess_features,
-    preprocess_features_noise,
     postprocess_features,
-    preprocess_targets,
-    postprocess_targets,
     create_dataloader
 )
 from nets import create_ae
@@ -82,18 +80,33 @@ def run(args, params):
     #
 
     # load data
-    features, targets, features_noise = load_data(params, logging_get_logger('load_data'))
+    features, _, features_noise, _ = load_data(params, logging_get_logger('load_data'))
 
     # preprocess data
     features_scale = preprocess_features(features, params, logging_get_logger('preprocess_features'))
-    targets_scale  = preprocess_targets  (targets,  params, logging_get_logger('preprocess_targets'))
-    preprocess_features_noise(features_noise, features_scale)
+    features_noise_scale = preprocess_features(features_noise, params,
+                                               logging_get_logger('preprocess_features_noise'),
+                                               scale=features_scale, array_name='features_noise')
 
     # create dataloader
+    if ModeKeys.TRAIN == mode:
+        mode_to_data_key = 'train'
+    elif ModeKeys.VALIDATE == mode:
+        mode_to_data_key = 'validate'
+    elif ModeKeys.EVAL == mode:
+        mode_to_data_key = 'test'
+    else:
+        raise NotImplementedError()
     dataloader = create_dataloader(
-            params, logging_get_logger('create_dataloader'), mode,
-            features, targets, features_noise=features_noise,
-            item_return_order='yy')
+            params,
+            logging_get_logger('create_dataloader'),
+            mode,
+            features          = features[mode_to_data_key],
+            targets           = None,
+            features_noise    = features_noise[mode_to_data_key],
+            targets_noise     = None,
+            item_return_order = 'yy'
+    )
 
     #
     # Network
@@ -134,9 +147,15 @@ def run(args, params):
 
         # train network
         epoch_dlog = train_epochs(
-                params['training']['epochs'], net, dataloader, optimizer, loss_fn,
-                device=device, logger=logger,
-                checkpoint_epochs=checkpoint_epochs, checkpoint_dir=checkpoint_dir
+                params['training']['epochs'],
+                net,
+                dataloader,
+                optimizer,
+                loss_fn,
+                device            = device,
+                logger            = logger,
+                checkpoint_epochs = checkpoint_epochs,
+                checkpoint_dir    = checkpoint_dir
         )
         time_train = epoch_dlog['time_train']
 
@@ -149,36 +168,48 @@ def run(args, params):
     print('<evaluate>')
 
     # create dataloaders
-    dataloader_eval = dict()
-    for key, dl_mode in zip(['train', 'validate', 'test'], [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL]):
-        dataloader_eval[key] = create_dataloader(
-                params, logging_get_logger('create_dataloader'), dl_mode,
-                features, targets, features_noise=features_noise,
-                item_return_order='yy',
-                dataloader_kwargs={'shuffle':False, 'drop_last':False}
+    eval_dataloader = dict()
+    for key in features.keys():
+        eval_dataloader[key] = create_dataloader(
+                params,
+                logging_get_logger('create_dataloader'),
+                ModeKeys.EVAL,
+                features          = features[key],
+                targets           = None,
+                features_noise    = features_noise[key],
+                targets_noise     = None,
+                item_return_order = 'yy'
         )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    features_predict = evaluate(net, dataloader_eval, params)
+    eval_features_pred = evaluate(net, eval_dataloader, params)
     time_eval = timeit.default_timer() - time_eval
 
-    # postprocess predictions
-    postprocess_features(features, features_scale, params)
-    postprocess_features(features_predict, features_scale, params)
+    # postprocess evaluation data
+    if dictarray_is_not_none(features):
+        eval_features_data = features
+        postprocess_features(eval_features_data, features_scale, params)
+        postprocess_features(eval_features_pred, features_scale, params)
+    elif dictarray_is_not_none(features_noise):
+        eval_features_data = features_noise
+        postprocess_features(eval_features_data, features_noise_scale, params)
+        postprocess_features(eval_features_pred, features_noise_scale, params)
+    else:
+        raise NotImplementedError()
 
     # compute percentiles
     percentiles = [0.10, 0.25, 0.50, 0.75, 0.90]
-    features_percentiles, features_predict_percentiles, _ = get_mse_percentiles(
-            features, features_predict, percentiles)
+    eval_features_data_percentiles, eval_features_pred_percentiles, _ = get_mse_percentiles(
+            eval_features_data, eval_features_pred, percentiles)
 
     # compute evaluation metrics
     eval_mse = dict()
     eval_mae = dict()
     eval_r2  = dict()
-    for key in ['train', 'validate', 'test']:
-        y_data = features[key].squeeze()
-        y_pred = features_predict[key].squeeze()
+    for key in eval_features_data.keys():
+        y_data = eval_features_data[key].squeeze()
+        y_pred = eval_features_pred[key].squeeze()
         eval_mse[key] = metrics.mean_squared_error(y_data, y_pred)
         eval_mae[key] = metrics.mean_absolute_error(y_data, y_pred)
         eval_r2[key]  = metrics.r2_score(y_data, y_pred)
@@ -216,14 +247,19 @@ def run(args, params):
 
     # plot predictions percentiles
     timesteps = load_timesteps(params)
-    for key in ['train', 'validate', 'test']:
+    for key in eval_features_data.keys():
+        # skip if no samples exist
+        if params['data']['N'+key] <= 0:
+            continue
+        # set up plotting
         m = len(percentiles)
         fig, ax = plt.subplots(m, 1, figsize=(10, 2*m))
-        y_lim = [ min(np.min(features_percentiles[key]), np.min(features_predict_percentiles[key])),
-                  max(np.max(features_percentiles[key]), np.max(features_predict_percentiles[key])) ]
+        y_lim = [ min(np.min(eval_features_data_percentiles[key]), np.min(eval_features_pred_percentiles[key])),
+                  max(np.max(eval_features_data_percentiles[key]), np.max(eval_features_pred_percentiles[key])) ]
+        # plot true values vs. predictions
         for i in range(m):
-            y_data = features_percentiles[key][i]
-            y_pred = features_predict_percentiles[key][i]
+            y_data = eval_features_data_percentiles[key][i]
+            y_pred = eval_features_pred_percentiles[key][i]
             y_mse  = np.mean((y_pred - y_data)**2)
             ax[i].plot(timesteps, y_data, label=f"data ({key})",
                        color='tab:orange', linewidth=0, marker='.', markersize=6)
@@ -245,32 +281,31 @@ def run(args, params):
 
 ###############################################################################
 
-def evaluate(net, dataloader_eval, params):
+def evaluate(net, eval_dataloader, params):
     net.eval()
     # evaluate network predictions
     y_predict = dict()
     with torch.no_grad():
-        for key in dataloader_eval.keys():
+        for key in eval_dataloader.keys():
             y_list = list()
-            for data in dataloader_eval[key]:
-                x, y = data
+            for data in eval_dataloader[key]:
+                x, _ = data
                 x = x.to(device)
-                y = y.to(device)
                 y = net(x)
                 y_list.append(y.cpu().numpy())
             y_predict[key] = np.concatenate(y_list, axis=0)
     # return predictions
     return y_predict
 
-def get_mse_percentiles(features, features_predict, percentiles):
+def get_mse_percentiles(features_data, features_pred, percentiles):
     features_percentiles         = dict()
     features_predict_percentiles = dict()
-    for key in features.keys():
-        assert key in features_predict
-        features_shape = features[key].shape
+    for key in features_data.keys():
+        assert key in features_pred
+        features_shape = features_data[key].shape
         # calculate MSE
-        y_data = features[key].squeeze()
-        y_pred = features_predict[key].squeeze()
+        y_data = features_data[key].squeeze()
+        y_pred = features_pred[key].squeeze()
         y_mse  = np.mean((y_pred - y_data)**2, axis=1)
         # sort MSE
         idx_sorted = np.argsort(y_mse)
@@ -279,8 +314,8 @@ def get_mse_percentiles(features, features_predict, percentiles):
         features_predict_percentiles[key] = np.empty_like(features_percentiles[key])
         for j, p in enumerate(percentiles):
             i = int(np.round(p * features_shape[0]))
-            features_percentiles[key][j]         = features[key][idx_sorted[i]]
-            features_predict_percentiles[key][j] = features_predict[key][idx_sorted[i]]
+            features_percentiles[key][j]         = features_data[key][idx_sorted[i]]
+            features_predict_percentiles[key][j] = features_pred[key][idx_sorted[i]]
     # return percentiles
     return features_percentiles, features_predict_percentiles, idx_sorted
 

@@ -299,16 +299,20 @@ def run(args, params):
 
     # compute evaluation metrics
     eval_mse = dict()
+    eval_mae = dict()
     eval_r2  = dict()
     for key in eval_targets_data.keys():
         y_data = eval_targets_data[key]
         y_pred = eval_targets_pred[key]
-        eval_mse[key]        = [metrics.mean_squared_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
-        eval_mse[key+'_all'] =  metrics.mean_squared_error(y_data, y_pred)
-        eval_r2[key]        = [metrics.r2_score(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
-        eval_r2[key+'_all'] =  metrics.r2_score(y_data, y_pred)
-        logger.info(f"Evaluate - MSE ({key}):      " + str(eval_mse[key]) + f" {eval_mse[key+'_all']}")
-        logger.info(f"Evaluate - R2 score ({key}): " + str(eval_r2[key]) + f" {eval_r2[key+'_all']}")
+        eval_mse[key+'_i'] = [metrics.mean_squared_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
+        eval_mse[key     ] =  metrics.mean_squared_error(y_data, y_pred)
+        eval_mae[key+'_i'] = [metrics.mean_absolute_error(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
+        eval_mae[key     ] =  metrics.mean_absolute_error(y_data, y_pred)
+        eval_r2[key+'_i']  = [metrics.r2_score(y_data[:,i], y_pred[:,i]) for i in range(y_data.shape[1])]
+        eval_r2[key     ]  =  metrics.r2_score(y_data, y_pred)
+        logger.info(f"Evaluate - MSE ({key}):      " + str(eval_mse[key+'_i']) + f" {eval_mse[key]}")
+        logger.info(f"Evaluate - MAE ({key}):      " + str(eval_mae[key+'_i']) + f" {eval_mae[key]}")
+        logger.info(f"Evaluate - R2 score ({key}): " + str(eval_r2[key+'_i'])  + f" {eval_r2[key]}")
 
     print('</evaluate>')
 
@@ -339,7 +343,7 @@ def run(args, params):
               loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
 
     # plot predictions
-    for key in ['train', 'validate', 'test']:
+    for key in eval_targets_data.keys():
         # skip if no samples exist
         if params['data']['N'+key] <= 0:
             continue

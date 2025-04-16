@@ -53,7 +53,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
             targets_     = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
             targets_     = targets_[:-Ntest,...]
             targets_test = targets_[-Ntest:,...]
-        elif targets_type == 'NOISE'.casefold():
+        elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
@@ -73,7 +73,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
             targets_noise_     = np.stack((noise_correl, noise_stddev), axis=1)
             targets_noise_     = targets_noise_[:-Ntest,...]
             targets_noise_test = targets_noise_[-Ntest:,...]
-        elif targets_type == 'ODE'.casefold():
+        elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
@@ -97,7 +97,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
             targets_     = np.load(data_dir/'fhn_Ntrain20000_param.npy')
             targets_test = np.load(data_dir/'fhn_Ntest2000_param.npy')
-        elif targets_type == 'NOISE'.casefold():
+        elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
@@ -115,7 +115,7 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
             targets_noise_     = np.load(data_dir/'ar1_Ntrain20000_param.npy')
             targets_noise_test = np.load(data_dir/'ar1_Ntest2000_param.npy')
-        elif targets_type == 'ODE'.casefold():
+        elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
@@ -147,7 +147,7 @@ def load_data(params, logger):
     data_params   = params['data']
     data_dir      = pathlib.Path(data_params['data_dir'])
     features_type = data_params['features_type'].casefold()
-    targets_type  = data_params['targets_type'].casefold()
+    targets_type  = data_params.get('targets_type', 'N/A').casefold()
 
     # read data and split files
     features, targets, features_noise, targets_noise = _load_and_split_arrays(
@@ -204,7 +204,6 @@ def load_data(params, logger):
     # print data shapes
     logger.debug(f"num_features: {params['data']['num_features']}")
     logger.debug(f"num_targets:  {params['data']['num_targets']}")
-    assert 0 < params['data']['num_targets']
 
     # return data
     return features, targets, features_noise, targets_noise
@@ -212,7 +211,12 @@ def load_data(params, logger):
 def load_timesteps(params):
     data_params = params['data']
     data_dir    = pathlib.Path(data_params['data_dir'])
-    timesteps   = np.load(data_dir/'fhn_T200_samplePrior_time.npy')
+    if '2020' in data_dir.name:
+        timesteps = np.load(data_dir/'fhn_T200_samplePrior_time.npy')
+    elif '2025' in data_dir.name:
+        timesteps = np.load(data_dir/'fhn_timesteps_Nt2000_dt0.2.npy')
+    else:
+        raise NotImplementedError(f"Unsupported data directory: {data_dir}")
     return timesteps
 
 ###############################################################################
@@ -482,9 +486,12 @@ class FHN_Dataset(Dataset):
             else:
                 noise_idx = None
                 features_transformed = features
-        else:
+        elif self.features_noise is not None:
             features = self.features_noise[idx]
             features_transformed = features
+        else:
+            features = None
+            features_transformed = None
 
         if self.features_transform_fn is not None:
             features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
@@ -504,20 +511,25 @@ class FHN_Dataset(Dataset):
                 assert noise_idx is not None
                 targets_noise = self.targets_noise[noise_idx]
                 targets = torch.cat((targets, targets_noise), dim=0)
-        else:
+        elif self.targets_noise is not None:
             targets = self.targets_noise[idx]
+        else:
+            targets = None
 
         if 'xx'.casefold() == self.item_return_order:
-            sample = (targets, targets)
+            assert targets is not None
+            return (targets, targets)
         elif 'xy'.casefold() == self.item_return_order:
-            sample = (targets, features_transformed)
+            assert features_transformed is not None and targets is not None
+            return (targets, features_transformed)
         elif 'yx'.casefold() == self.item_return_order:
-            sample = (features_transformed, targets)
+            assert features_transformed is not None and targets is not None
+            return (features_transformed, targets)
         elif 'yy'.casefold() == self.item_return_order:
-            sample = (features_transformed, features)
+            assert features_transformed is not None and features is not None
+            return (features_transformed, features)
         else:
             raise ValueError(f"Unknown item return order: {self.item_return_order}")
-        return sample
 
 
 def create_dataloader(params, logger, mode,

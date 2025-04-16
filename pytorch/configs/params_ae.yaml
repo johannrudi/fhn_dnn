@@ -1,11 +1,13 @@
 description: "Options for Autoencoder"
 
 data:
-    data_dir:  '../data/float32' # relative path to data directory
-    data_type: 'TIME_NOISE'      # 'TIME', 'TIME_NOISE', 'RATE', 'RATE_DURATION'
+    data_dir:  '../data/2025-04-11' # relative path to data directory
+    features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION', 'NOISE'
+    features_sub_length: 2000       # use sub interval of this size
+    features_sub_begin_random: False # flag to pick a sub interval at random
     Ntrain:    1024
-    Nvalidate: 2048
-    Ntest:     2048
+    Nvalidate: 1000
+    Ntest:     2000
     train_shuffle_buffer_size: 1000
     train_batch_size: 256
     eval_batch_size:  256
@@ -100,7 +102,7 @@ d_net:
             - 256
 
 optimizer:
-    learning_rate: 0.001
+    learning_rate: 1.0e-3
     beta1: 0.9
     beta2: 0.999
     epsilon: 1.0e-8
