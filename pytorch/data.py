@@ -27,93 +27,119 @@ def dictarray_is_not_none(arr):
 
 ###############################################################################
 
-def _load_numpy(data_dir, features_type, targets_type):
-    # TODO split in train, validate..
+def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalidate, Ntest):
+    # load arrays
     if '2020' in data_dir.name:
+        # set default
+        if Ntest is None:
+            Ntest = 2000
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
-            features = np.load(data_dir/'fhn_T200_samplePrior_state0.npy')
-            features = np.expand_dims(features, axis=1)
+            features_     = np.expand_dims( np.load(data_dir/'fhn_T200_samplePrior_state0.npy'), axis=1 )
+            features_     = features_[:Ntest,...]
+            features_test = features_[-Ntest:,...]
         elif features_type == 'RATE_DURATION'.casefold():
-            rate = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
-            rate = np.expand_dims(rate, axis=1)
-            duration = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
-            duration = np.expand_dims(duration, axis=1)
-            features = np.concatenate([rate, duration], axis=1)
-            features = np.expand_dims(features, axis=1)
+            rate          = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
+            duration      = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
+            features_     = np.expand_dims( np.stack((rate, duration), axis=1), axis=1 )
+            features_     = features_[:Ntest,...]
+            features_test = features_[-Ntest:,...]
         elif features_type == 'NOISE'.casefold():
-            features = None
+            pass
         else:
-            raise ValueError(f"Unknown features_type: {features_type}")
-        # load features noise
-        if features_type in ['TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
-            features_noise = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy')
-            features_noise = np.expand_dims(features_noise, axis=1)
-        elif features_type in ['TIME'.casefold(), 'RATE_DURATION'.casefold()]:
-            features_noise = None
-        else:
-            raise ValueError(f"Unknown features_type: {features_type}")
+            raise ValueError(f"Unknown {features_type=}")
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
+            targets_     = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
+            targets_     = targets_[:Ntest,...]
+            targets_test = targets_[-Ntest:,...]
         elif targets_type == 'NOISE'.casefold():
-            targets = None
+            pass
         else:
-            raise ValueError(f"Unknown targets_type: {targets_type}")
+            raise ValueError(f"Unknown {targets_type=}")
+        # load features noise
+        if features_type in ['TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+            features_noise_     = np.expand_dims( np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy'), axis=1 )
+            features_noise_     = features_noise_[:Ntest,...]
+            features_noise_test = features_noise_[-Ntest:,...]
+        elif features_type in ['TIME'.casefold(), 'RATE_DURATION'.casefold()]:
+            pass
+        else:
+            raise ValueError(f"Unknown {features_type=}")
         # load targets of noise
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
-            noise_correl  = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_correlation.npy')
-            noise_stddev  = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_stddev.npy')
-            targets_noise = np.stack((noise_correl, noise_stddev), axis=1)
+            noise_correl       = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_correlation.npy')
+            noise_stddev       = np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_stddev.npy')
+            targets_noise_     = np.stack((noise_correl, noise_stddev), axis=1)
+            targets_noise_     = targets_noise_[:Ntest,...]
+            targets_noise_test = targets_noise_[-Ntest:,...]
         elif targets_type == 'ODE'.casefold():
-            targets_noise = None
+            pass
         else:
-            raise ValueError(f"Unknown targets_type: {targets_type}")
+            raise ValueError(f"Unknown {targets_type=}")
     elif '2025' in data_dir.name:
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
-            state_train = np.load(data_dir/'fhn_Ntrain20000_state_Nt2000_dt0.2.npy')
-            state_test  = np.load(data_dir/'fhn_Ntest2000_state_Nt2000_dt0.2.npy')
-            features    = np.concatenate((state_train[:,0:1,:], state_test[:,0:1,:]), axis=0)
+            features_     = np.load(data_dir/'fhn_Ntrain20000_state_Nt2000_dt0.2.npy')[:,0:1,:]
+            features_test = np.load(data_dir/'fhn_Ntest2000_state_Nt2000_dt0.2.npy')[:,0:1,:]
+            if Ntest is None:
+                Ntest = features_test.shape[0]
         elif features_type == 'RATE_DURATION'.casefold():
-            state_stats_train = np.load(data_dir/'fhn_Ntrain20000_state_stats.npy')
-            state_stats_test  = np.load(data_dir/'fhn_Ntest2000_state_stats.npy')
-            features = np.concatenate((state_stats_train, state_stats_test), axis=0)
-            features = np.expand_dims(features, axis=1)
+            features_     = np.expand_dims( np.load(data_dir/'fhn_Ntrain20000_state_stats.npy'), axis=1 )
+            features_test = np.expand_dims( np.load(data_dir/'fhn_Ntest2000_state_stats.npy'), axis=1 )
+            if Ntest is None:
+                Ntest = features_test.shape[0]
         elif features_type == 'NOISE'.casefold():
-            features = None
+            pass
         else:
-            raise ValueError(f"Unknown features_type: {features_type}")
-        # load features of noise
-        if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
-            noise_train = np.load(data_dir/'ar1_Ntrain20000_state_Nt2000_dt0.2.npy')
-            noise_test  = np.load(data_dir/'ar1_Ntest2000_state_Nt2000_dt0.2.npy')
-            features_noise = np.concatenate((noise_train, noise_test), axis=0)
-            features_noise = np.expand_dims(features_noise, axis=1)
-        elif features_type in ['TIME'.casefold(), 'RATE_DURATION'.casefold()]:
-            features_noise = None
-        else:
-            raise ValueError(f"Unknown features_type: {features_type}")
+            raise ValueError(f"Unknown {features_type=}")
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-            param_train = np.load(data_dir/'fhn_Ntrain20000_param.npy')
-            param_test  = np.load(data_dir/'fhn_Ntest2000_param.npy')
-            targets     = np.concatenate((param_train, param_test), axis=0)
+            targets_     = np.load(data_dir/'fhn_Ntrain20000_param.npy')
+            targets_test = np.load(data_dir/'fhn_Ntest2000_param.npy')
         elif targets_type == 'NOISE'.casefold():
-            targets     = None
+            pass
         else:
-            raise ValueError(f"Unknown targets_type: {targets_type}")
+            raise ValueError(f"Unknown {targets_type=}")
+        # load features of noise
+        if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
+            features_noise_     = np.expand_dims( np.load(data_dir/'ar1_Ntrain20000_state_Nt2000_dt0.2.npy'), axis=1 )
+            features_noise_test = np.expand_dims( np.load(data_dir/'ar1_Ntest2000_state_Nt2000_dt0.2.npy'), axis=1 )
+            if Ntest is None:
+                Ntest = features_noise_test.shape[0]
+        elif features_type in ['TIME'.casefold(), 'RATE_DURATION'.casefold()]:
+            pass
+        else:
+            raise ValueError(f"Unknown {features_type=}")
         # load targets of noise
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
-            noise_param_train = np.load(data_dir/'ar1_Ntrain20000_param.npy')
-            noise_param_test  = np.load(data_dir/'ar1_Ntest2000_param.npy')
-            targets_noise     = np.concatenate((noise_param_train, noise_param_test), axis=0)
+            targets_noise_     = np.load(data_dir/'ar1_Ntrain20000_param.npy')
+            targets_noise_test = np.load(data_dir/'ar1_Ntest2000_param.npy')
         elif targets_type == 'ODE'.casefold():
-            targets_noise     = None
+            pass
         else:
-            raise ValueError(f"Unknown targets_type: {targets_type}")
+            raise ValueError(f"Unknown {targets_type=}")
     else:
         raise NotImplementedError(f"Unsupported data directory: {data_dir}")
+
+    # split arrays
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'RATE_DURATION'.casefold()]:
+        features = dictarray_set(features_[:Ntrain,...], features_[-Nvalidate:,...], features_test[:Ntest,...])
+    else:
+        features = dictarray_empty()
+    if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
+        targets = dictarray_set(targets_[:Ntrain,...], targets_[-Nvalidate:,...], targets_test[:Ntest,...])
+    else:
+        targets = dictarray_empty()
+    if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
+        features_noise = dictarray_set(features_noise_[:Ntrain,...], features_noise_[-Nvalidate:,...], features_noise_test[:Ntest,...])
+    else:
+        features_noise = dictarray_empty()
+    if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
+        targets_noise = dictarray_set(targets_noise_[:Ntrain,...], targets_noise_[-Nvalidate:,...], targets_noise_test[:Ntest,...])
+    else:
+        targets_noise  = dictarray_empty()
+
     # return features and targets
     return features, targets, features_noise, targets_noise
 
@@ -123,94 +149,64 @@ def load_data(params, logger):
     features_type = data_params['features_type'].casefold()
     targets_type  = data_params['targets_type'].casefold()
 
-    # load numpy files
-    features, targets, features_noise, targets_noise = _load_numpy(data_dir, features_type, targets_type)
+    # read data and split files
+    features, targets, features_noise, targets_noise = _load_and_split_arrays(
+            data_dir,
+            features_type,
+            targets_type,
+            data_params.get('Ntrain'),
+            data_params.get('Nvalidate'),
+            data_params.get('Ntest', None)
+    )
 
     # print info
-    logger.info(f"features shape:       {features.shape}, dtype: {features.dtype}")
-    logger.info(f"targets shape:        {targets.shape}, dtype: {targets.dtype}")
-    if features_noise is not None:
-        logger.info(f"features_noise shape: {features_noise.shape}, dtype: {features_noise.dtype}")
-    if targets_noise is not None:
-        logger.info(f"targets_noise shape:  {targets_noise.shape}, dtype: {targets_noise.dtype}")
-    assert targets.shape[0] == features.shape[0]
-    assert features_noise is None or features_noise.shape == features.shape
-    assert targets_noise  is None or features_noise is not None
-    assert targets_noise  is None or targets_noise.shape[0] == features_noise.shape[0]
+    if dictarray_is_not_none(features):
+        for key in features.keys():
+            logger.info(f"features['{key}']:\tshape {features[key].shape}, dtype {features[key].dtype}")
+    if dictarray_is_not_none(targets):
+        for key in targets.keys():
+            logger.info(f"targets['{key}']: \tshape {targets[key].shape}, dtype {targets[key].dtype}")
+    if dictarray_is_not_none(features_noise):
+        for key in features_noise.keys():
+            logger.info(f"features_noise['{key}']:\tshape {features_noise[key].shape}, dtype {features_noise[key].dtype}")
+    if dictarray_is_not_none(targets_noise):
+        for key in targets_noise.keys():
+            logger.info(f"targets_noise['{key}']: \tshape {targets_noise[key].shape}, dtype {targets_noise[key].dtype}")
 
-    # set sizes
-    Ns = features.shape[0]
-    logger.info(f"Ns:        {Ns}")
-    logger.info(f"Ntrain:    {data_params['Ntrain']}")
-    logger.info(f"Nvalidate: {data_params['Nvalidate']}")
-    logger.info(f"Ntest:     {data_params['Ntest']}")
-    assert (data_params['Ntrain'] + data_params['Nvalidate'] + data_params['Ntest']) <= Ns
-
-    # split data into training and testing sets
-    features_train    = features[:data_params['Ntrain'],...]
-    targets_train     = targets [:data_params['Ntrain'],...]
-    features_validate = features[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-    targets_validate  = targets [data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-    features_test     = features[-data_params['Ntest']:,...]
-    targets_test      = targets [-data_params['Ntest']:,...]
-    logger.info(f"features_train_shape:    {features_train.shape}")
-    logger.info(f"features_validate_shape: {features_validate.shape}")
-    logger.info(f"features_test_shape:     {features_test.shape}")
-    logger.info(f"targets_train_shape:     {targets_train.shape}")
-    logger.info(f"targets_validate_shape:  {targets_validate.shape}")
-    logger.info(f"targets_test_shape:      {targets_test.shape}")
-    if features_noise is not None:
-        features_noise_train    = features_noise[:data_params['Ntrain'],...]
-        features_noise_validate = features_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-        features_noise_test     = features_noise[-data_params['Ntest']:,...]
-        logger.info(f"features_noise_train shape:    {features_noise_train.shape}")
-        logger.info(f"features_noise_validate shape: {features_noise_validate.shape}")
-        logger.info(f"features_noise_test shape:     {features_noise_test.shape}")
+    # set feature sizes
+    if dictarray_is_not_none(features):
+        params['data']['num_features'] = list(features['train'].shape[1:])
+        params['data'].setdefault('Ntest', features['test'].shape[0])
+    elif dictarray_is_not_none(features_noise):
+        params['data']['num_features'] = list(features_noise['train'].shape[1:])
+        params['data'].setdefault('Ntest', features_noise['test'].shape[0])
     else:
-        features_noise_train    = None
-        features_noise_validate = None
-        features_noise_test     = None
-    if targets_noise is not None:
-        targets_noise_train    = targets_noise[:data_params['Ntrain'],...]
-        targets_noise_validate = targets_noise[data_params['Ntrain']:data_params['Ntrain']+data_params['Nvalidate'],...]
-        targets_noise_test     = targets_noise[-data_params['Ntest']:,...]
-        logger.info(f"targets_noise_train shape:    {targets_noise_train.shape}")
-        logger.info(f"targets_noise_validate shape: {targets_noise_validate.shape}")
-        logger.info(f"targets_noise_test shape:     {targets_noise_test.shape}")
-    else:
-        targets_noise_train    = None
-        targets_noise_validate = None
-        targets_noise_test     = None
-
-    # set dimensions
-    params['data']['num_features'] = list(features.shape[1:])
-    params['data']['num_targets']  = targets.shape[1]
+        raise NotImplementedError()
+    # set reduced feature sizes
     if params['data']['features_sub_length'] and \
        params['data']['features_sub_length'] < params['data']['num_features'][-1]:
         params['data']['num_features'][-1] = params['data']['features_sub_length']
-    if targets_noise is not None:
-        params['data']['num_targets'] += targets_noise.shape[1]
+
+    # set targets sizes
+    params['data']['num_targets'] = 0
+    if dictarray_is_not_none(targets):
+        assert dictarray_is_not_none(features)
+        params['data']['num_targets'] += targets['train'].shape[1]
+    if dictarray_is_not_none(targets_noise):
+        assert dictarray_is_not_none(features_noise)
+        params['data']['num_targets'] += targets_noise['train'].shape[1]
+
+    # print sample sizes
+    logger.info(f"Ntrain:    {data_params['Ntrain']}")
+    logger.info(f"Nvalidate: {data_params['Nvalidate']}")
+    logger.info(f"Ntest:     {data_params['Ntest']}")
+
+    # print data shapes
     logger.debug(f"num_features: {params['data']['num_features']}")
     logger.debug(f"num_targets:  {params['data']['num_targets']}")
+    assert 0 < params['data']['num_targets']
 
-    # bundle arrays
-    if features is not None:
-        features = dictarray_set(features_train, features_validate, features_test)
-    else:
-        features = dictarray_empty()
-    if targets is not None:
-        targets  = dictarray_set(targets_train, targets_validate, targets_test)
-    else:
-        targets  = dictarray_empty()
-    if features_noise is not None:
-        features_noise = dictarray_set(features_noise_train, features_noise_validate, features_noise_test)
-    else:
-        features_noise = dictarray_empty()
-    if targets_noise is not None:
-        targets_noise  = dictarray_set(targets_noise_train, targets_noise_validate, targets_noise_test)
-    else:
-        targets_noise  = dictarray_empty()
-
+    # return data
     return features, targets, features_noise, targets_noise
 
 def load_timesteps(params):
@@ -342,6 +338,9 @@ def _postprocess_array(arr, scale):
     _apply_scale_inverse(arr, scale)
 
 def preprocess_targets(targets, params, logger, scale=None):
+    # exit if nothing to do
+    if targets is None or (isinstance(targets, dict) and dictarray_is_none(targets)):
+        return None
     # calculate scaling
     if scale is None:
         mean  = np.nanmean(targets['train'], axis=0, keepdims=True)
@@ -470,9 +469,19 @@ class FHN_Dataset(Dataset):
             item_return_order='yx'
     ):
         super().__init__()
-        self.features = torch.from_numpy(features)
-        self.targets  = torch.from_numpy(targets)
-        assert self.features.size(0) == self.targets.size(0)
+        assert features is not None or features_noise is not None
+        assert targets is None or features is not None
+        assert targets_noise is None or features_noise is not None
+
+        if features is not None:
+            self.features = torch.from_numpy(features)
+        else:
+            self.features = None
+        if targets is not None:
+            self.targets = torch.from_numpy(targets)
+            assert self.targets.size(0) == self.features.size(0)
+        else:
+            self.targets = None
         if features_noise is not None:
             self.features_noise = torch.from_numpy(features_noise)
         else:
@@ -481,6 +490,7 @@ class FHN_Dataset(Dataset):
             self.targets_noise = torch.from_numpy(targets_noise)
         else:
             self.targets_noise = None
+
         self.features_transform_fn      = features_transform_fn
         self.features_sub_length        = features_sub_length
         self.features_sub_begin_random  = features_sub_begin_random
@@ -488,22 +498,30 @@ class FHN_Dataset(Dataset):
         self.item_return_order          = item_return_order.casefold()
 
     def __len__(self):
-        return self.features.size(0)
+        if self.features is not None:
+            return self.features.size(0)
+        else:
+            return self.features_noise.size(0)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        features = self.features[idx]
-        if self.features_noise is not None:
-            if self.noise_idx_random:
-                noise_idx = torch.randint(self.features_noise.size(0), (1,))[0]
+        if self.features is not None:
+            features = self.features[idx]
+            if self.features_noise is not None:
+                if self.noise_idx_random:
+                    noise_idx = torch.randint(self.features_noise.size(0), (1,))[0]
+                else:
+                    noise_idx = idx
+                features_transformed = features + self.features_noise[noise_idx]
             else:
-                noise_idx = idx
-            features_transformed = features + self.features_noise[noise_idx]
+                noise_idx = None
+                features_transformed = features
         else:
-            noise_idx = None
+            features = self.features_noise[idx]
             features_transformed = features
+
         if self.features_transform_fn is not None:
             features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
         if self.features_sub_length and \
@@ -516,11 +534,14 @@ class FHN_Dataset(Dataset):
             features             = features            [...,idx_begin:idx_end]
             features_transformed = features_transformed[...,idx_begin:idx_end]
 
-        targets = self.targets[idx]
-        if self.targets_noise is not None:
-            assert noise_idx is not None
-            targets_noise = self.targets_noise[noise_idx]
-            targets = torch.cat((targets, targets_noise), dim=0)
+        if self.targets is not None:
+            targets = self.targets[idx]
+            if self.targets_noise is not None:
+                assert noise_idx is not None
+                targets_noise = self.targets_noise[noise_idx]
+                targets = torch.cat((targets, targets_noise), dim=0)
+        else:
+            targets = self.targets_noise[idx]
 
         if 'xx'.casefold() == self.item_return_order:
             sample = (targets, targets)

@@ -267,22 +267,27 @@ def run(args, params):
     time_eval = timeit.default_timer() - time_eval
 
     # set up evaluation data
-    if dictarray_is_not_none(targets_noise):
+    if dictarray_is_not_none(targets) and \
+       dictarray_is_not_none(targets_noise):
         targets_data = {}
         for key in ['train', 'validate', 'test']:
             targets_data[key] = np.concatenate((targets[key], targets_noise[key]), axis=1)
-    else:
+    elif dictarray_is_not_none(targets):
         targets_data = targets
+    elif dictarray_is_not_none(targets_noise):
+        targets_data = targets_noise
 
     # postprocess predictions
-    n_targets = targets['train'].shape[1]
-    for key in ['train', 'validate', 'test']:
-        postprocess_targets(targets_data[key][:,:n_targets],    targets_scale)
-        postprocess_targets(targets_predict[key][:,:n_targets], targets_scale)
-    if dictarray_is_not_none(targets_noise):
+    if dictarray_is_not_none(targets):
+        n_targets = targets['train'].shape[1]
         for key in ['train', 'validate', 'test']:
-            postprocess_targets_noise(targets_data[key][:,:n_targets],    targets_noise_scale)
-            postprocess_targets_noise(targets_predict[key][:,:n_targets], targets_noise_scale)
+            postprocess_targets(targets_data[key][:,:n_targets],    targets_scale)
+            postprocess_targets(targets_predict[key][:,:n_targets], targets_scale)
+    if dictarray_is_not_none(targets_noise):
+        n_targets_noise = targets_noise['train'].shape[1]
+        for key in ['train', 'validate', 'test']:
+            postprocess_targets_noise(targets_data[key][:,-n_targets_noise:],    targets_noise_scale)
+            postprocess_targets_noise(targets_predict[key][:,-n_targets_noise:], targets_noise_scale)
 
     # compute evaluation metrics
     eval_mse = dict()

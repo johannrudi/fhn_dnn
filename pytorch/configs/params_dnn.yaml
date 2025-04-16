@@ -8,7 +8,7 @@ data:
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntrain:    1024
     Nvalidate: 2000
-    Ntest:     2000
+   #Ntest:     2000
     train_shuffle_buffer_size: 1000
     train_batch_size: 256
     eval_batch_size:  256
