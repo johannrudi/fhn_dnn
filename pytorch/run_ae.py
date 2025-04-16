@@ -202,11 +202,13 @@ def run(args, params):
             eval_features_data, eval_features_pred, percentiles)
 
     # compute evaluation metrics
-    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(eval_features_data, eval_features_pred)
+    eval_mse, eval_mae, eval_mape, eval_medae, eval_r2 = eval_data_vs_pred(eval_features_data, eval_features_pred)
     for key in eval_features_data.keys():
-        logger.info(f"Evaluate - MSE ({key}):      {eval_mse[key]}")
-        logger.info(f"Evaluate - MAE ({key}):      {eval_mae[key]}")
-        logger.info(f"Evaluate - R2 score ({key}): {eval_r2[key]}")
+        logger.info(f"Evaluate - {key} - MSE:      {eval_mse[key]}")
+        logger.info(f"Evaluate - {key} - MAE:      {eval_mae[key]}")
+        logger.info(f"Evaluate - {key} - MedAE:    {eval_medae[key]}")
+        logger.info(f"Evaluate - {key} - MAPE:     {eval_mape[key]}")
+        logger.info(f"Evaluate - {key} - R2 score: {eval_r2[key]}")
 
     print('</evaluate>')
 
@@ -290,16 +292,20 @@ def predict(net, eval_dataloader, params):
     return pred, data
 
 def eval_data_vs_pred(data, pred):
-    eval_mse = dict()
-    eval_mae = dict()
-    eval_r2  = dict()
+    eval_mse   = dict()
+    eval_mae   = dict()
+    eval_mape  = dict()
+    eval_medae = dict()
+    eval_r2    = dict()
     for key in data.keys():
         data_ = data[key].squeeze()
         pred_ = pred[key].squeeze()
-        eval_mse[key] = metrics.mean_squared_error(data_, pred_)
-        eval_mae[key] = metrics.mean_absolute_error(data_, pred_)
-        eval_r2[key]  = metrics.r2_score(data_, pred_)
-    return eval_mse, eval_mae, eval_r2
+        eval_mse[key]   = metrics.mean_squared_error(data_, pred_)
+        eval_mae[key]   = metrics.mean_absolute_error(data_, pred_)
+        eval_mape[key]  = metrics.mean_absolute_percentage_error(data_, pred_)
+        eval_medae[key] = metrics.median_absolute_error(data_, pred_)
+        eval_r2[key]    = metrics.r2_score(data_, pred_)
+    return eval_mse, eval_mae, eval_mape, eval_medae, eval_r2
 
 def get_mse_percentiles(features_data, features_pred, percentiles):
     features_percentiles         = dict()
