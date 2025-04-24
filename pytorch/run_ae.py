@@ -212,10 +212,10 @@ def run(args, params):
         print('</train>')
 
     #
-    # Evaluation
+    # Prediction
     #
 
-    print('<evaluate>')
+    print('<predict>')
 
     # create dataloaders
     eval_dataloader = dict()
@@ -245,6 +245,23 @@ def run(args, params):
         postprocess_features(eval_features_pred, features_noise_scale, params)
     else:
         raise NotImplementedError()
+
+    # save predictions to file
+    if params['predictions']['save_subdir']:
+        for key in eval_features_pred.keys():
+            path = os.path.join(self_dir,
+                                params['runconfig']['save_dir'],
+                                params['predictions']['save_subdir'],
+                                f"features_predict_{key}.npy")
+            np.save(path, eval_features_pred[key])
+
+    print('</predict>')
+
+    #
+    # Evaluation
+    #
+
+    print('<evaluate>')
 
     # compute percentiles
     percentiles = [0.10, 0.25, 0.50, 0.75, 0.90]

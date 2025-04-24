@@ -135,11 +135,14 @@ optimizer:
 training:
     epochs: 400
 
+prediction:
+    save_subdir: 'predict'
+
 runconfig:
     mode: 'TRAIN'
     load_dir: #'runs/ae_dir'
     save_dir:  'runs/ae_dir'
-    log_epochs: 1
-    save_checkpoints_epochs: 50
+    log_epochs: 1                # TODO move to [training] in all configs
+    save_checkpoints_epochs: 50  # TODO move to [training] in all configs
     debug: True
     show_plots: False
