@@ -134,9 +134,57 @@ def run(args, params):
         print('<train>')
 
         # create optimizer
-        optimizer = torch.optim.Adam(net.parameters(), lr=params['optimizer']['learning_rate'],
-                                     betas=(params['optimizer']['beta1'], params['optimizer']['beta2']),
-                                     eps=params['optimizer']['epsilon'])
+        if 'Adam'.casefold() == params['optimizer']['type'].casefold():
+            optimizer = torch.optim.Adam(
+                    net.parameters(),
+                    lr    = params['optimizer']['learning_rate'],
+                    betas = (params['optimizer']['beta1'], params['optimizer']['beta2']),
+                    eps   = params['optimizer']['epsilon']
+            )
+        elif 'AdamW'.casefold() == params['optimizer']['type'].casefold():
+            optimizer = torch.optim.AdamW(
+                    net.parameters(),
+                    lr           = params['optimizer']['learning_rate'],
+                    betas        = (params['optimizer']['beta1'], params['optimizer']['beta2']),
+                    eps          = params['optimizer']['epsilon'],
+                    weight_decay = params['optimizer']['weight_decay']
+            )
+        else:
+            raise ValueError('Unknown name for optimizer: '+params['optimizer']['type'])
+
+        # create learning rate scheduler
+        if 'learning_rate_scheduler' in params['optimizer'] and \
+           params['optimizer']['learning_rate_scheduler'] is not None:
+            params_lr_scheduler = params['optimizer']['learning_rate_scheduler']
+            milestone_epochs = [
+                params_lr_scheduler['linear_epochs'],
+                params_lr_scheduler['linear_epochs'] + params_lr_scheduler['constant_epochs'],
+            ]
+            schedulers = [
+                torch.optim.lr_scheduler.LinearLR(
+                        optimizer,
+                        start_factor = params_lr_scheduler['init_learning_rate']/params['optimizer']['learning_rate'],
+                        end_factor   = 1.0,
+                        total_iters  = params_lr_scheduler['linear_epochs']
+                ),
+                torch.optim.lr_scheduler.ConstantLR(
+                        optimizer,
+                        factor       = 1.0,
+                        total_iters  = params_lr_scheduler['constant_epochs']
+                ),
+                torch.optim.lr_scheduler.CosineAnnealingLR(
+                        optimizer,
+                        T_max        = params['training']['epochs'] - milestone_epochs[-1] - 1,
+                        eta_min      = params_lr_scheduler['final_learning_rate']
+                ),
+            ]
+            lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+                    optimizer,
+                    schedulers = schedulers,
+                    milestones = milestone_epochs
+            )
+        else:
+            lr_scheduler = None
 
         # set loss function
         loss_fn = torch.nn.MSELoss()
@@ -152,10 +200,12 @@ def run(args, params):
                 dataloader,
                 optimizer,
                 loss_fn,
-                device            = device,
-                logger            = logger,
-                checkpoint_epochs = checkpoint_epochs,
-                checkpoint_dir    = checkpoint_dir
+                lr_scheduler        = lr_scheduler,
+                device              = device,
+                inputs_transform_fn = None,
+                logger              = logger,
+                checkpoint_epochs   = checkpoint_epochs,
+                checkpoint_dir      = checkpoint_dir
         )
         time_train = epoch_dlog['time_train']
 

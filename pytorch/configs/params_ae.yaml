@@ -13,7 +13,7 @@ data:
     eval_batch_size:  256
     random_seed: 123
     # latent space of encoder output / decoder input [ONLY FOR MLP NET]
-    latent_dim: 16  # e.g., 2, 4, 16, 64, 125
+    latent_dim: 16  # e.g., 2, 4, 8, 16, 32, 64
 
 e_net:
     type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
@@ -23,7 +23,12 @@ e_net:
     conv_internal_channels: 32
     conv_channel_mult:
       - 1
-      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+#     - 32
+#     - 64
       - 1
 
     dense_layer_sizes:
@@ -70,7 +75,12 @@ d_net:
     conv_internal_channels: 32
     conv_channel_mult:
       - 1
-      - 1
+#     - 64
+#     - 32
+      - 16
+      - 8
+      - 4
+      - 2
       - 1
 
     dense_layer_sizes:
@@ -110,13 +120,20 @@ d_net:
             - 256
 
 optimizer:
-    learning_rate: 1.0e-3
+    type: 'AdamW'  # 'Adam', 'AdamW'
+    learning_rate: 1.0e-2
     beta1: 0.9
     beta2: 0.999
     epsilon: 1.0e-8
+    weight_decay: 0.01  # used in AdamW
+    learning_rate_scheduler:
+        init_learning_rate: 1.0e-3
+        linear_epochs:   50  # num epochs to get from `init_learning_rate` to `learning_rate`
+        constant_epochs: 50  # num epochs to stay at `learning_rate`
+        final_learning_rate: 1.0e-4
 
 training:
-    epochs: 600
+    epochs: 400
 
 runconfig:
     mode: 'TRAIN'
