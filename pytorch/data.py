@@ -124,19 +124,31 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
 
     # split arrays
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'RATE_DURATION'.casefold()]:
-        features = dictarray_set(features_[:Ntrain,...], features_[-Nvalidate:,...], features_test[:Ntest,...])
+        ft_train    = features_[:Ntrain,...]     if 0 < Ntrain    else np.array([])
+        ft_validate = features_[-Nvalidate:,...] if 0 < Nvalidate else np.array([])
+        ft_test     = features_test[:Ntest,...]  if 0 < Ntest     else np.array([])
+        features = dictarray_set(ft_train, ft_validate, ft_test)
     else:
         features = dictarray_empty()
     if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-        targets = dictarray_set(targets_[:Ntrain,...], targets_[-Nvalidate:,...], targets_test[:Ntest,...])
+        tg_train    = targets_[:Ntrain,...]     if 0 < Ntrain    else np.array([])
+        tg_validate = targets_[-Nvalidate:,...] if 0 < Nvalidate else np.array([])
+        tg_test     = targets_test[:Ntest,...]  if 0 < Ntest     else np.array([])
+        targets = dictarray_set(tg_train, tg_validate, tg_test)
     else:
         targets = dictarray_empty()
     if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
-        features_noise = dictarray_set(features_noise_[:Ntrain,...], features_noise_[-Nvalidate:,...], features_noise_test[:Ntest,...])
+        ft_train    = features_noise_[:Ntrain,...]     if 0 < Ntrain    else np.array([])
+        ft_validate = features_noise_[-Nvalidate:,...] if 0 < Nvalidate else np.array([])
+        ft_test     = features_noise_test[:Ntest,...]  if 0 < Ntest     else np.array([])
+        features_noise = dictarray_set(ft_train, ft_validate, ft_test)
     else:
         features_noise = dictarray_empty()
     if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
-        targets_noise = dictarray_set(targets_noise_[:Ntrain,...], targets_noise_[-Nvalidate:,...], targets_noise_test[:Ntest,...])
+        tg_train    = targets_noise_[:Ntrain,...]     if 0 < Ntrain    else np.array([])
+        tg_validate = targets_noise_[-Nvalidate:,...] if 0 < Nvalidate else np.array([])
+        tg_test     = targets_noise_test[:Ntest,...]  if 0 < Ntest     else np.array([])
+        targets_noise = dictarray_set(tg_train, tg_validate, tg_test)
     else:
         targets_noise  = dictarray_empty()
 

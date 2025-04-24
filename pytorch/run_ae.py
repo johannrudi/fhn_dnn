@@ -47,8 +47,8 @@ def run(args, params):
     mode     = ModeKeys.get_from_name(mode_name)
 
     # set up logging
-    logging_set_up( os.path.join(self_dir, params['runconfig']['save_dir'], 'run_dnn') )
-    logger = logging_get_logger('run_dnn')
+    logging_set_up( os.path.join(self_dir, params['runconfig']['save_dir'], 'run_ae') )
+    logger = logging_get_logger('run_ae')
 
     # print environment
     logger.info(f"Environment - Directory:       {self_dir}")
@@ -120,8 +120,17 @@ def run(args, params):
 
     # load network weights
     if params['runconfig']['load_dir']:
-        net_path = os.path.join(self_dir, params['runconfig']['load_dir'])
-        net.load_state_dict(torch.load(net_path, map_location=device))
+        import glob
+
+        checkpoint_folders = glob.glob(os.path.join(self_dir, params['runconfig']['load_dir'], "checkpoints", "*"))
+        latest_folder = max(checkpoint_folders, key=os.path.getmtime)
+        checkpoint_files = glob.glob(os.path.join(latest_folder, "*.pt"))
+        requested_checkpoint = max(checkpoint_files, key=os.path.getmtime)
+
+        logger.info(f"Load network: use checkpoint file: {requested_checkpoint}")
+
+        checkpoint = torch.load(requested_checkpoint, map_location=device)
+        net.load_state_dict(checkpoint['model_state_dict'])
 
     # transfer to device
     net.to(device)
@@ -247,11 +256,11 @@ def run(args, params):
         raise NotImplementedError()
 
     # save predictions to file
-    if params['predictions']['save_subdir']:
+    if params['predict']['save_subdir']:
         for key in eval_features_pred.keys():
             path = os.path.join(self_dir,
                                 params['runconfig']['save_dir'],
-                                params['predictions']['save_subdir'],
+                                params['predict']['save_subdir'],
                                 f"features_predict_{key}.npy")
             np.save(path, eval_features_pred[key])
 
@@ -301,9 +310,10 @@ def run(args, params):
         logger.info(f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}")
 
     # plot loss
-    path = os.path.join(self_dir, params['runconfig']['save_dir'], 'loss')
-    plot_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
-              loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
+    if ModeKeys.TRAIN == mode:
+        path = os.path.join(self_dir, params['runconfig']['save_dir'], 'loss')
+        plot_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
+                  loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
 
     # plot predictions percentiles
     for key in eval_features_data.keys():
@@ -353,8 +363,8 @@ def predict(net, eval_dataloader, params):
                 yp = net(x)
                 d_list.append(yd.cpu().numpy())
                 p_list.append(yp.cpu().numpy())
-            data[key] = np.concatenate(d_list, axis=0)
-            pred[key] = np.concatenate(p_list, axis=0)
+            data[key] = np.concatenate(d_list, axis=0) if d_list else np.array([])
+            pred[key] = np.concatenate(p_list, axis=0) if p_list else np.array([])
     # return predictions and (true) data
     return pred, data
 
@@ -365,6 +375,13 @@ def eval_data_vs_pred(data, pred):
     eval_medae = dict()
     eval_r2    = dict()
     for key in data.keys():
+        if 0 == len(data[key]) and 0 == len(pred[key]):
+            eval_mse[key]   = np.nan
+            eval_mae[key]   = np.nan
+            eval_mape[key]  = np.nan
+            eval_medae[key] = np.nan
+            eval_r2[key]    = np.nan
+            continue
         data_ = data[key].squeeze()
         pred_ = pred[key].squeeze()
         eval_mse[key]   = metrics.mean_squared_error(data_, pred_)
@@ -379,6 +396,10 @@ def get_mse_percentiles(features_data, features_pred, percentiles):
     features_predict_percentiles = dict()
     for key in features_data.keys():
         assert key in features_pred
+        if 0 == len(features_data[key]) and 0 == len(features_pred[key]):
+            features_percentiles[key]         = np.array([])
+            features_predict_percentiles[key] = np.array([])
+            continue
         features_shape = features_data[key].shape
         # calculate MSE
         y_data = features_data[key].squeeze()
