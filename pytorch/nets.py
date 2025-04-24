@@ -164,7 +164,7 @@ def create_enc_dec(params, logger):
                 input_channels,
                 latent_channels,
                 internal_channels = e_net_params['conv_internal_channels'],
-                channel_mult      = (1, 1, 1)
+                channel_mult      = e_net_params['conv_channel_mult']
         )
     else:
         raise NotImplementedError()
@@ -191,7 +191,7 @@ def create_enc_dec(params, logger):
                 latent_channels,
                 output_channels,
                 internal_channels = d_net_params['conv_internal_channels'],
-                channel_mult      = (1, 1, 1)
+                channel_mult      = d_net_params['conv_channel_mult']
         )
     else:
         raise NotImplementedError()

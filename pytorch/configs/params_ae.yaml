@@ -21,6 +21,10 @@ e_net:
     dropout: #0.2
 
     conv_internal_channels: 32
+    conv_channel_mult:
+      - 1
+      - 1
+      - 1
 
     dense_layer_sizes:
         - 500
@@ -64,6 +68,10 @@ d_net:
     dropout: #0.2
 
     conv_internal_channels: 32
+    conv_channel_mult:
+      - 1
+      - 1
+      - 1
 
     dense_layer_sizes:
         - 16
