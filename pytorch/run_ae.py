@@ -242,7 +242,7 @@ def run(args, params):
 
     # compute predictions
     time_eval = timeit.default_timer()
-    eval_features_pred, eval_features_data = predict(net, eval_dataloader, params)
+    eval_features_pred, eval_features_data, eval_latent_pred = predict(net, eval_dataloader, params)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess evaluation data
@@ -257,12 +257,12 @@ def run(args, params):
 
     # save predictions to file
     if params['predict']['save_subdir']:
+        path = os.path.join(self_dir,
+                            params['runconfig']['save_dir'],
+                            params['predict']['save_subdir'])
         for key in eval_features_pred.keys():
-            path = os.path.join(self_dir,
-                                params['runconfig']['save_dir'],
-                                params['predict']['save_subdir'],
-                                f"features_predict_{key}.npy")
-            np.save(path, eval_features_pred[key])
+            np.save(os.path.join(path, f"features_predict_{key}.npy"), eval_features_pred[key])
+            np.save(os.path.join(path, f"latent_predict_{key}.npy"), eval_latent_pred[key])
 
     print('</predict>')
 
@@ -352,21 +352,26 @@ def run(args, params):
 def predict(net, eval_dataloader, params):
     net.eval()
     # get network predictions
-    data = dict()
-    pred = dict()
+    data   = dict()
+    pred   = dict()
+    latent = dict()
     with torch.no_grad():
         for key in eval_dataloader.keys():
             d_list = list()
             p_list = list()
+            l_list = list()
             for x, yd in eval_dataloader[key]:
                 x = x.to(device)
-                yp = net(x)
+                zp = net.encode(x)
+                yp = net.decode(zp)
                 d_list.append(yd.cpu().numpy())
                 p_list.append(yp.cpu().numpy())
-            data[key] = np.concatenate(d_list, axis=0) if d_list else np.array([])
-            pred[key] = np.concatenate(p_list, axis=0) if p_list else np.array([])
+                l_list.append(zp.cpu().numpy())
+            data[key]   = np.concatenate(d_list, axis=0) if d_list else np.array([])
+            pred[key]   = np.concatenate(p_list, axis=0) if p_list else np.array([])
+            latent[key] = np.concatenate(l_list, axis=0) if l_list else np.array([])
     # return predictions and (true) data
-    return pred, data
+    return pred, data, latent
 
 def eval_data_vs_pred(data, pred):
     eval_mse   = dict()
