@@ -252,10 +252,10 @@ def run(args, params):
         print('</train>')
 
     #
-    # Evaluation
+    # Prediction
     #
 
-    print('<evaluate>')
+    print('<predict>')
 
     # create dataloaders
     eval_dataloader = dict()
@@ -292,8 +292,16 @@ def run(args, params):
     else:
         raise NotImplementedError()
 
+    print('</predict>')
+
+    #
+    # Evaluation
+    #
+
+    print('<evaluate>')
+
     # compute evaluation metrics
-    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(eval_features_data, eval_features_pred)
+    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(eval_targets_data, eval_targets_pred)
     for key in eval_targets_data.keys():
         logger.info(f"Evaluate - MSE ({key}):      " + str(eval_mse[key+'_i']) + f" {eval_mse[key]}")
         logger.info(f"Evaluate - MAE ({key}):      " + str(eval_mae[key+'_i']) + f" {eval_mae[key]}")

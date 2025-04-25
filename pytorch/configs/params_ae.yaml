@@ -1,10 +1,11 @@
 description: "Options for Autoencoder"
 
 data:
-    data_dir:  '../data/2025-04-11' # relative path to data directory
-    features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION', 'NOISE'
+    data_dir: '../data/2025-04-11'  # relative path to data directory
+    features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_sub_length: 1000       # use sub interval of this size
     features_sub_begin_random: True # flag to pick a sub interval at random
+    features_additive_noise_std: 0  # add i.i.d. noise
     Ntrain:    1024
     Nvalidate: 1000
     Ntest:     2000
