@@ -18,7 +18,7 @@ from dlkit.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 from utils import NetworkType
 
 # --------------------------------------
-# Deep Neural Networks (DNNs) for Inverse Maps
+# Neural Networks for Inverse Maps
 # --------------------------------------
 
 def _get_activation(name):
@@ -107,7 +107,7 @@ def _create_transformerNet(params, logger):
             use_dropout=net_params['dropout']
     )
 
-def create_dnn(params, logger):
+def create_network(params, logger):
     net_params = params['net']
     net_type   = NetworkType.get_from_name(net_params['type'])
     logger.info(f"Network type: {net_params['type']}, key: {net_type}")

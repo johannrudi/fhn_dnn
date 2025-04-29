@@ -7,8 +7,8 @@ import enum
 class ModeKeys(enum.Enum):
     TRAIN    = enum.auto()
     VALIDATE = enum.auto()
-    EVAL     = enum.auto()
     PREDICT  = enum.auto()
+    EVAL     = enum.auto()
 
     @staticmethod
     def get_from_name(name):

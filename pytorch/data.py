@@ -557,11 +557,11 @@ def create_dataloader(params, logger, mode,
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
-    if ModeKeys.TRAIN == mode:
+    if mode == ModeKeys.TRAIN:
         dataset_kwargs    = {'noise_idx_random': True}
         dataloader_kwargs = {'shuffle': True, 'drop_last': False,
                              'batch_size': params['data']['train_batch_size']}
-    elif ModeKeys.VALIDATE == mode or ModeKeys.EVAL == mode:
+    elif mode in [ModeKeys.VALIDATE, ModeKeys.PREDICT, ModeKeys.EVAL]:
         dataset_kwargs    = {'noise_idx_random': False}
         dataloader_kwargs = {'shuffle': False, 'drop_last': False,
                              'batch_size': params['data']['eval_batch_size']}

@@ -30,7 +30,7 @@ from data import (
     postprocess_targets,
     create_dataloader
 )
-from nets import create_dnn, create_ae
+from nets import create_network, create_ae
 
 ###############################################################################
 
@@ -153,7 +153,7 @@ def run(args, params):
     #
 
     # create network
-    net = create_dnn(params, logging_get_logger('create_network'))
+    net = create_network(params, logging_get_logger('create_network'))
     print('<network>')
     print(net)
     print('</network>')
