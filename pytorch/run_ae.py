@@ -260,6 +260,7 @@ def run(args, params):
         path = os.path.join(self_dir,
                             params['runconfig']['save_dir'],
                             params['predict']['save_subdir'])
+        os.mkdir(path)
         for key in eval_features_pred.keys():
             np.save(os.path.join(path, f"features_predict_{key}.npy"), eval_features_pred[key])
             np.save(os.path.join(path, f"latent_predict_{key}.npy"), eval_latent_pred[key])

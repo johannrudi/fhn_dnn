@@ -3,8 +3,8 @@ description: "Options for Autoencoder"
 data:
     data_dir: '../data/2025-04-11'  # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
-    features_sub_length: 1000       # use sub interval of this size
-    features_sub_begin_random: True # flag to pick a sub interval at random
+    features_sub_length: 1024       # use sub interval of this size
+    features_sub_begin_random: False # flag to pick a sub interval at random
     features_additive_noise_std: 0  # add i.i.d. noise
     Ntrain:    1024
     Nvalidate: 1000
@@ -14,7 +14,7 @@ data:
     eval_batch_size:  256
     random_seed: 123
     # latent space of encoder output / decoder input [ONLY FOR MLP NET]
-    latent_dim: 16  # e.g., 2, 4, 8, 16, 32, 64
+    latent_dim: 16  # e.g., 4, 8, 16, 32, 64
 
 e_net:
     type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
@@ -23,13 +23,15 @@ e_net:
 
     conv_internal_channels: 32
     conv_channel_mult:
-      - 1
-      - 2
-      - 4
-      - 8
-#     - 16
-#     - 32
-#     - 64
+      - 1  # latent dim = size(features) / 2
+      - 2  # latent dim = size(features) / 4
+      - 4  # latent dim = size(features) / 8
+      - 8  # latent dim = size(features) / 16
+      - 8  # latent dim = size(features) / 32
+      - 8  # latent dim = size(features) / 64
+#     - 8  # latent dim = size(features) / 128
+#     - 8  # latent dim = size(features) / 256
+#     - 8  # latent dim = size(features) / 512
       - 1
 
     dense_layer_sizes:
@@ -76,13 +78,15 @@ d_net:
     conv_internal_channels: 32
     conv_channel_mult:
       - 1
-#     - 64
-#     - 32
-#     - 16
-      - 8
-      - 4
-      - 2
-      - 1
+#     - 8  # latent dim = size(features) / 512
+#     - 8  # latent dim = size(features) / 256
+#     - 8  # latent dim = size(features) / 128
+      - 8  # latent dim = size(features) / 64
+      - 8  # latent dim = size(features) / 32
+      - 8  # latent dim = size(features) / 16
+      - 4  # latent dim = size(features) / 8
+      - 2  # latent dim = size(features) / 4
+      - 1  # latent dim = size(features) / 2
 
     dense_layer_sizes:
         - 16
@@ -141,8 +145,8 @@ predict:
 
 runconfig:
     mode: 'TRAIN'
-    load_dir: #'runs/ae_dir'
-    save_dir:  'runs/ae_dir'
+    load_dir: #'runs/ae'
+    save_dir:  'runs/ae'
     log_epochs: 1                # TODO move to [training] in all configs
     save_checkpoints_epochs: 50  # TODO move to [training] in all configs
     debug: True
