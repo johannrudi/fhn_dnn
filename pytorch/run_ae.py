@@ -9,8 +9,12 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
-from dlkit.log.log_util import (logging_set_up, logging_get_logger)
+from dlkit.log.log_util import (
+    logging_set_up,
+    logging_get_logger
+)
 from dlkit.opt.train import train_epochs
+from dlkit.opt.opt_scheduler import create_learning_rate_scheduler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (
@@ -165,32 +169,14 @@ def run(args, params):
         if 'learning_rate_scheduler' in params['optimizer'] and \
            params['optimizer']['learning_rate_scheduler'] is not None:
             params_lr_scheduler = params['optimizer']['learning_rate_scheduler']
-            milestone_epochs = [
-                params_lr_scheduler['linear_epochs'],
-                params_lr_scheduler['linear_epochs'] + params_lr_scheduler['constant_epochs'],
-            ]
-            schedulers = [
-                torch.optim.lr_scheduler.LinearLR(
-                        optimizer,
-                        start_factor = params_lr_scheduler['init_learning_rate']/params['optimizer']['learning_rate'],
-                        end_factor   = 1.0,
-                        total_iters  = params_lr_scheduler['linear_epochs']
-                ),
-                torch.optim.lr_scheduler.ConstantLR(
-                        optimizer,
-                        factor       = 1.0,
-                        total_iters  = params_lr_scheduler['constant_epochs']
-                ),
-                torch.optim.lr_scheduler.CosineAnnealingLR(
-                        optimizer,
-                        T_max        = params['training']['epochs'] - milestone_epochs[-1] - 1,
-                        eta_min      = params_lr_scheduler['final_learning_rate']
-                ),
-            ]
-            lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+            lr_scheduler = create_learning_rate_scheduler(
                     optimizer,
-                    schedulers = schedulers,
-                    milestones = milestone_epochs
+                    params['training']['epochs'],
+                    params['optimizer']['learning_rate'],
+                    linear_epochs       = params_lr_scheduler['linear_epochs'],
+                    constant_epochs     = params_lr_scheduler['constant_epochs'],
+                    init_learning_rate  = params_lr_scheduler['init_learning_rate'],
+                    final_learning_rate = params_lr_scheduler['final_learning_rate'],
             )
         else:
             lr_scheduler = None

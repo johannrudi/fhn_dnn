@@ -4,7 +4,7 @@ data:
     data_dir: '../data/2025-04-11'  # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_sub_length: 1000       # use sub interval of this size
-    features_sub_begin_random: True # flag to pick a sub interval at random
+    features_sub_begin_random: False # flag to pick a sub interval at random
     features_additive_noise_std: 0  # add i.i.d. noise
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntrain:    1024
@@ -77,8 +77,8 @@ training:
 
 runconfig:
     mode: 'TRAIN'
-    load_dir: #'runs/dnn_dir'
-    save_dir:  'runs/dnn_dir'
+    load_dir: #'runs/dnn'
+    save_dir:  'runs/dnn'
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True

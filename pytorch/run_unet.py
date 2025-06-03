@@ -9,7 +9,10 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
-from dlkit.log.log_util import (logging_set_up, logging_get_logger)
+from dlkit.log.log_util import (
+    logging_set_up,
+    logging_get_logger
+)
 from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
