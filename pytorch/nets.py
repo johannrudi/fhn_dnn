@@ -62,6 +62,7 @@ def _create_MLPResNet(params, logger):
             output_size,
             residual_blocks_sizes      = net_params['residual_blocks_sizes'],
             residual_blocks_activation = _get_activation(net_params['activation_fn']),
+            attention_layers_n_heads   = net_params['attention_layers_n_heads'],
             use_dropout                = net_params['dropout'],
             output_layer_activation    = None
     )

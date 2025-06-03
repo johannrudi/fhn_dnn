@@ -13,8 +13,8 @@ from dlkit.log.log_util import (
     logging_set_up,
     logging_get_logger
 )
-from dlkit.opt.train import train_epochs
 from dlkit.opt.scheduler import create_learning_rate_scheduler
+from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (
