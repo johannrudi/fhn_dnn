@@ -60,6 +60,7 @@ def _create_MLPResNet(params, logger):
     return MLPResNet(
             input_size,
             output_size,
+            embedding_size             = net_params['embedding_size'],
             residual_blocks_sizes      = net_params['residual_blocks_sizes'],
             residual_blocks_activation = _get_activation(net_params['activation_fn']),
             attention_layers_n_heads   = net_params['attention_layers_n_heads'],
