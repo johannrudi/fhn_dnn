@@ -13,6 +13,7 @@ from dlkit.log.log_util import (
     logging_set_up,
     logging_get_logger
 )
+from dlkit.nets.util import print_parameters
 from dlkit.opt.scheduler import create_learning_rate_scheduler
 from dlkit.opt.train import train_epochs
 
@@ -161,6 +162,9 @@ def run(args, params):
     print('<network>')
     print(net)
     print('</network>')
+    print('<parameters>')
+    print_parameters(net)
+    print('</parameters>')
 
     # load network weights
     if params['runconfig']['load_dir']:
@@ -360,7 +364,7 @@ def predict(net, eval_dataloader, params, features_transform_fn=None):
         for key in eval_dataloader.keys():
             d_list = list()
             p_list = list()
-            for x, yd in eval_dataloader[key]:
+            for x, yd in tqdm(eval_dataloader[key], desc=key):
                 x = x.to(device)
                 if features_transform_fn is not None:
                     x = features_transform_fn(x)
