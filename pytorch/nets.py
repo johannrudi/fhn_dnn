@@ -60,12 +60,14 @@ def _create_MLPResNet(params, logger):
     return MLPResNet(
             input_size,
             output_size,
-            embedding_size             = net_params['embedding_size'],
-            residual_blocks_sizes      = net_params['residual_blocks_sizes'],
-            residual_blocks_activation = _get_activation(net_params['activation_fn']),
-            attention_layers_n_heads   = net_params['attention_layers_n_heads'],
-            use_dropout                = net_params['dropout'],
-            output_layer_activation    = None
+            embedding_size                   = net_params['embedding_size'],
+            attention_blocks_n_heads         = net_params['attention_layers_n_heads'],
+            attention_blocks_activation_size = net_params['embedding_size'] * 4,
+            attention_blocks_activation      = _get_activation(net_params['activation_fn']),
+            residual_blocks_sizes            = net_params['residual_blocks_sizes'],
+            residual_blocks_activation       = _get_activation(net_params['activation_fn']),
+            use_dropout                      = net_params['dropout'],
+            output_layer_activation          = None
     )
 
 def _create_convNet(params, logger):

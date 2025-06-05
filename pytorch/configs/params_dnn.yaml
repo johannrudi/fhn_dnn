@@ -54,12 +54,12 @@ net:
             - 32
             - 128
             - 32
-    embedding_size: 1 #4
+    embedding_size: 1 #16
     attention_layers_n_heads:
-    #   - 2
-    #   - 2
-    #   - 2
-    #   - 2
+    #   - 4
+    #   - 4
+    #   - 4
+    #   - 4
 
     transformer_embedding_size: 32
     transformer_n_heads: 4
