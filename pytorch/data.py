@@ -27,7 +27,7 @@ def dictarray_is_not_none(arr):
 
 ###############################################################################
 
-def _load_and_split_arrays(data_params, Ntrain, Nvalidate, Ntest):
+def _load_and_split_arrays(data_params):
     features_type = data_params['features_type'].casefold()
     targets_type  = data_params.get('targets_type', 'N/A').casefold()
     data_dir      = pathlib.Path(data_params['data_dir'])
@@ -48,6 +48,9 @@ def _load_and_split_arrays(data_params, Ntrain, Nvalidate, Ntest):
     )
     features_use_channels_range = data_params.get('features_use_channels_range', None)
     features_use_length_range   = data_params.get('features_use_length_range', None)
+    Ntrain    = data_params.get('Ntrain')
+    Nvalidate = data_params.get('Nvalidate')
+    Ntest     = data_params.get('Ntest', None)
 
     # load arrays
     if '2020' in data_dir.name:
@@ -187,15 +190,10 @@ def _load_and_split_arrays(data_params, Ntrain, Nvalidate, Ntest):
     return features, targets, features_noise, targets_noise
 
 def load_data(params, logger):
-    data_params   = params['data']
+    data_params = params['data']
 
     # read data and split files
-    features, targets, features_noise, targets_noise = _load_and_split_arrays(
-            data_params,
-            data_params.get('Ntrain'),
-            data_params.get('Nvalidate'),
-            data_params.get('Ntest', None)
-    )
+    features, targets, features_noise, targets_noise = _load_and_split_arrays(data_params)
 
     # print info
     if dictarray_is_not_none(features):

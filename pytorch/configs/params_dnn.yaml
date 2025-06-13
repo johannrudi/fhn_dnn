@@ -23,7 +23,7 @@ data:
     autoencoder_latent_dim: 16  # e.g., 2, 4, 16, 64, 125
 
 net:
-    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet', 'TransformerNet' (prototype)
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet', 'TransformerNet'
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
     dropout: #0.2
 
@@ -59,16 +59,15 @@ net:
             - 32
             - 128
             - 32
-    embedding_size: 1
-    attention_layers_n_heads:
-   #    - 4
-   #    - 4
-   #    - 4
-   #    - 4
 
-    transformer_embedding_size: 32
-    transformer_n_heads: 4
-    transformer_feedforward_size: 256
+   #embedding_size: 128
+   #attention_layers_n_heads:
+   #    - 8
+   #    - 8
+   #    - 8
+   #    - 8
+   #    - 8
+   #    - 8
 
 optimizer:
     type: 'AdamW'  # 'Adam', 'AdamW'

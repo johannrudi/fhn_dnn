@@ -9,7 +9,7 @@ import numpy as np
 
 from dlkit.nets.mlp import (MLPNet, MLPNet_MultIn, MLPResNet)
 from dlkit.nets.conv1d import ConvNet
-from dlkit.nets.transformer import Transformer1d0dModel
+from dlkit.nets.transformer1d import TransformerNet
 from dlkit.nets.autoencoder import Autoencoder
 from dlkit.nets.unet import UNet1d_2021 as UNet
 from dlkit.nets.unet import EncoderNet1d_2021 as EncoderConvNet
@@ -103,14 +103,21 @@ def _create_convNet(params, logger):
 
 def _create_transformerNet(params, logger):
     net_params = params['net']
-    return Transformer1d0dModel(
-            params['data']['num_features'][1], # src_size
-            params['data']['num_targets'],     # trg_size
-            net_params['transformer_embedding_size'],
-            net_params['transformer_n_heads'],
-            net_params['transformer_feedforward_size'],
-            output_layer_activation=None,
-            use_dropout=net_params['dropout']
+    if params['data']['autoencoder_load_dir']:
+        input_size = params['data']['autoencoder_latent_dim']
+    else:
+        input_size = math.prod(params['data']['num_features'])
+    output_size  = params['data']['num_targets']
+    embed_size   = net_params.get('embedding_size')
+    attn_n_heads = net_params.get('attention_layers_n_heads')
+    return TransformerNet(
+            input_seq_size = input_size,
+            patch_size     = 50,                #TODO define config param
+            embedding_size = embed_size,
+            attn_n_heads   = attn_n_heads[0],   #TODO use all entries in list, not just the first one
+            num_layers     = len(attn_n_heads), #TODO utilize list, not just the length
+            output_size    = output_size,
+            dropout=net_params['dropout'] if net_params['dropout'] else 0.0
     )
 
 def create_network(params, logger):
