@@ -55,14 +55,16 @@ def _create_MLPResNet(params, logger):
     if params['data']['autoencoder_load_dir']:
         input_size = params['data']['autoencoder_latent_dim']
     else:
-        input_size = params['data']['num_features'][1]
-    output_size = params['data']['num_targets']
+        input_size = math.prod(params['data']['num_features'])
+    output_size  = params['data']['num_targets']
+    embed_size   = net_params.get('embedding_size', 1)
+    attn_n_heads = net_params.get('attention_layers_n_heads', None)
     return MLPResNet(
             input_size,
             output_size,
-            embedding_size                   = net_params['embedding_size'],
-            attention_blocks_n_heads         = net_params['attention_layers_n_heads'],
-            attention_blocks_activation_size = net_params['embedding_size'] * 4,
+            embedding_size                   = embed_size,
+            attention_blocks_n_heads         = attn_n_heads,
+            attention_blocks_activation_size = embed_size * 4,
             attention_blocks_activation      = _get_activation(net_params['activation_fn']),
             residual_blocks_sizes            = net_params['residual_blocks_sizes'],
             residual_blocks_activation       = _get_activation(net_params['activation_fn']),

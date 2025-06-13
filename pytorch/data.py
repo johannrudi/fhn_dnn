@@ -27,7 +27,28 @@ def dictarray_is_not_none(arr):
 
 ###############################################################################
 
-def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalidate, Ntest):
+def _load_and_split_arrays(data_params, Ntrain, Nvalidate, Ntest):
+    features_type = data_params['features_type'].casefold()
+    targets_type  = data_params.get('targets_type', 'N/A').casefold()
+    data_dir      = pathlib.Path(data_params['data_dir'])
+    file_names = data_params.get(
+            'file_names',
+            {
+                'features'           : 'fhn_Ntrain20000_state_Nt2000_dt0.2.npy',
+                'features_test'      : 'fhn_Ntest2000_state_Nt2000_dt0.2.npy',
+                'features_stats'     : 'fhn_Ntrain20000_state_stats.npy',
+                'features_stats_test': 'fhn_Ntest2000_state_stats.npy',
+                'targets'            : 'fhn_Ntrain20000_param.npy',
+                'targets_test'       : 'fhn_Ntest2000_param.npy',
+                'features_noise'     : 'ar1_Ntrain20000_state_Nt2000_dt0.2.npy',
+                'features_noise_test': 'ar1_Ntest2000_state_Nt2000_dt0.2.npy',
+                'targets_noise'      : 'ar1_Ntrain20000_param.npy',
+                'targets_noise_test' : 'ar1_Ntest2000_param.npy'
+            }
+    )
+    features_use_channels_range = data_params.get('features_use_channels_range', None)
+    features_use_length_range   = data_params.get('features_use_length_range', None)
+
     # load arrays
     if '2020' in data_dir.name:
         # set default
@@ -80,13 +101,23 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
     elif '2025' in data_dir.name:
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_     = np.load(data_dir/'fhn_Ntrain20000_state_Nt2000_dt0.2.npy')[:,0:1,:]
-            features_test = np.load(data_dir/'fhn_Ntest2000_state_Nt2000_dt0.2.npy')[:,0:1,:]
+            features_     = np.load(data_dir/file_names['features'])
+            features_test = np.load(data_dir/file_names['features_test'])
+            if features_use_channels_range is not None:
+                assert 2 == len(features_use_channels_range), len(features_use_channels_range)
+                start, stop   = features_use_channels_range
+                features_     = features_[:,start:stop,:]
+                features_test = features_test[:,start:stop,:]
+            if features_use_length_range is not None:
+                assert 2 == len(features_use_length_range), len(features_use_length_range)
+                start, stop = features_use_length_range
+                features_     = features_[:,:,start:stop]
+                features_test = features_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_test.shape[0]
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
-            features_     = np.expand_dims( np.load(data_dir/'fhn_Ntrain20000_state_stats.npy'), axis=1 )
-            features_test = np.expand_dims( np.load(data_dir/'fhn_Ntest2000_state_stats.npy'), axis=1 )
+            features_     = np.expand_dims( np.load(data_dir/file_names['features_stats']), axis=1 )
+            features_test = np.expand_dims( np.load(data_dir/file_names['features_stats_test']), axis=1 )
             if Ntest is None:
                 Ntest = features_test.shape[0]
         elif features_type == 'NOISE'.casefold():
@@ -95,16 +126,16 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
             raise ValueError(f"Unknown {features_type=}")
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets_     = np.load(data_dir/'fhn_Ntrain20000_param.npy')
-            targets_test = np.load(data_dir/'fhn_Ntest2000_param.npy')
+            targets_     = np.load(data_dir/file_names['targets'])
+            targets_test = np.load(data_dir/file_names['targets_test'])
         elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
         # load features of noise
         if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_noise_     = np.expand_dims( np.load(data_dir/'ar1_Ntrain20000_state_Nt2000_dt0.2.npy'), axis=1 )
-            features_noise_test = np.expand_dims( np.load(data_dir/'ar1_Ntest2000_state_Nt2000_dt0.2.npy'), axis=1 )
+            features_noise_     = np.expand_dims( np.load(data_dir/file_names['features_noise']), axis=1 )
+            features_noise_test = np.expand_dims( np.load(data_dir/file_names['features_noise_test']), axis=1 )
             if Ntest is None:
                 Ntest = features_noise_test.shape[0]
         elif features_type in ['TIME'.casefold(), 'ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
@@ -113,8 +144,8 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
             raise ValueError(f"Unknown {features_type=}")
         # load targets of noise
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets_noise_     = np.load(data_dir/'ar1_Ntrain20000_param.npy')
-            targets_noise_test = np.load(data_dir/'ar1_Ntest2000_param.npy')
+            targets_noise_     = np.load(data_dir/file_names['targets_noise'])
+            targets_noise_test = np.load(data_dir/file_names['targets_noise_test'])
         elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
@@ -157,15 +188,10 @@ def _load_and_split_arrays(data_dir, features_type, targets_type, Ntrain, Nvalid
 
 def load_data(params, logger):
     data_params   = params['data']
-    data_dir      = pathlib.Path(data_params['data_dir'])
-    features_type = data_params['features_type'].casefold()
-    targets_type  = data_params.get('targets_type', 'N/A').casefold()
 
     # read data and split files
     features, targets, features_noise, targets_noise = _load_and_split_arrays(
-            data_dir,
-            features_type,
-            targets_type,
+            data_params,
             data_params.get('Ntrain'),
             data_params.get('Nvalidate'),
             data_params.get('Ntest', None)
@@ -281,7 +307,16 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
     # calculate scaling
     if scale is None:
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
-            scale = {'shift': 0.0, 'mult': 1.0}
+            if params['data'].get('features_scale_to_normal', False):
+                scale = {
+                    'shift': np.mean(features['train'], axis=(0,2), keepdims=True),
+                    'mult' : np.std (features['train'], axis=(0,2), keepdims=True)
+                }
+            else:
+                scale = {
+                    'shift': 0.0,
+                    'mult':  1.0
+                }
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
             assert 3 == features['train'].ndim
             assert 1 == features['train'].shape[1]
@@ -574,10 +609,10 @@ def create_dataloader(params, logger, mode,
             features, targets,
             features_noise = features_noise,
             targets_noise  = targets_noise,
-            features_additive_noise_std = params['data']['features_additive_noise_std'],
+            features_additive_noise_std = params['data'].get('features_additive_noise_std', 0.0),
             features_transform_fn       = features_transform_fn,
-            features_sub_length         = params['data']['features_sub_length'],
-            features_sub_begin_random   = params['data']['features_sub_begin_random'],
+            features_sub_length         = params['data'].get('features_sub_length', 0),
+            features_sub_begin_random   = params['data'].get('features_sub_begin_random', False),
             item_return_order           = item_return_order,
             **dataset_kwargs
     )

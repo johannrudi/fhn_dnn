@@ -1,8 +1,13 @@
 description: "Options for DNN-based inverse maps"
 
 data:
+   #data_dir: '../data/2020-12-09'  # relative path to data directory (original data set from 2020)
     data_dir: '../data/2025-04-11'  # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
+    features_use_channels_range:
+        - 0
+        - 1
+    features_scale_to_normal: False # scale features to have zero mean and unit std
     features_sub_length: 1000       # use sub interval of this size
     features_sub_begin_random: False # flag to pick a sub interval at random
     features_additive_noise_std: 0  # add i.i.d. noise
@@ -54,12 +59,12 @@ net:
             - 32
             - 128
             - 32
-    embedding_size: 1 #16
+    embedding_size: 1
     attention_layers_n_heads:
-    #   - 4
-    #   - 4
-    #   - 4
-    #   - 4
+   #    - 4
+   #    - 4
+   #    - 4
+   #    - 4
 
     transformer_embedding_size: 32
     transformer_n_heads: 4
