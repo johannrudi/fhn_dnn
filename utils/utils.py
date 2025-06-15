@@ -22,6 +22,7 @@ class NetworkType(enum.Enum):
     MLPNET         = enum.auto()
     MLPRESNET      = enum.auto()
     CONVNET        = enum.auto()
+    EFFICIENTNET   = enum.auto()
     TRANSFORMERNET = enum.auto()
 
     @staticmethod

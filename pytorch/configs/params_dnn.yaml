@@ -23,49 +23,52 @@ data:
     autoencoder_latent_dim: 16  # e.g., 2, 4, 16, 64, 125
 
 net:
-    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
-    dropout: #0.2
-
 #   type: 'MLPNet'
 #   dense_layer_sizes:
 #       - 128
 #       - 128
 #       - 128
 #       - 128
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
-#   type: 'ConvNet'
-#   conv_layer_sizes:
-#       - 8
-#       - 16
-#       - 32
-#   dense_layer_sizes:
-#       - 128
-#       - 128
-#       - 128
-#       - 128
+#   type: 'MLPResNet'
+#   residual_blocks_sizes:
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
-    type: 'MLPResNet'
-    residual_blocks_sizes:
-        -
-            - 32
-            - 32
-            - 128
-            - 32
-        -
-            - 32
-            - 32
-            - 128
-            - 32
-        -
-            - 32
-            - 32
-            - 128
-            - 32
-        -
-            - 32
-            - 32
-            - 128
-            - 32
+    type: 'ConvNet'
+    conv_layer_sizes:
+        - 8
+        - 16
+        - 32
+    dense_layer_sizes:
+        - 128
+        - 128
+        - 128
+        - 128
+    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
+#   type: 'EfficientNet'
+#   dropout: 0.2
 
 #   type: 'TransformerNet'
 #   embedding_size: 128
@@ -77,6 +80,7 @@ net:
 #       - 8
 #       - 8
 #   patch_size: 50
+#   dropout: 0.0
 
 optimizer:
     type: 'AdamW'  # 'Adam', 'AdamW'

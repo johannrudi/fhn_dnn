@@ -13,6 +13,7 @@ from dlkit.nets.mlp import (
         MLPResNet
 )
 from dlkit.nets.conv1d import ConvNet
+from dlkit.nets.efficientnet import EfficientNet1D
 from dlkit.nets.transformer1d import (
         TransformerNet,
         ChannelWiseTransformerNet
@@ -108,6 +109,24 @@ def _create_convNet(params, logger):
             use_dropout=net_params['dropout']
     )
 
+def _create_efficientNet(params, logger):
+    net_params = params['net']
+    if params['data']['autoencoder_load_dir']:
+        input_size     = params['data']['autoencoder_latent_dim']
+        input_channels = 1
+    else:
+        assert 2 == len(params['data']['num_features'])
+        input_size     = params['data']['num_features'][1]
+        input_channels = params['data']['num_features'][0]
+    output_size = params['data']['num_targets']
+    return EfficientNet1D(
+            input_channels=input_channels,
+            input_length=input_size,
+            num_classes=output_size,
+            dropout_connect=net_params['dropout'] if net_params['dropout'] else 0.0,
+            dropout_head=net_params['dropout'] if net_params['dropout'] else 0.0
+    )
+
 def _create_transformerNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
@@ -152,6 +171,8 @@ def create_network(params, logger):
         net = _create_MLPResNet(params, logger)
     elif NetworkType.CONVNET == net_type:
         net = _create_convNet(params, logger)
+    elif NetworkType.EFFICIENTNET == net_type:
+        net = _create_efficientNet(params, logger)
     elif NetworkType.TRANSFORMERNET == net_type:
         net = _create_transformerNet(params, logger)
     else:
