@@ -9,7 +9,7 @@ data:
         - 1
     features_scale_to_normal: False # scale features to have zero mean and unit std
     features_sub_length: 1000       # use sub interval of this size
-    features_sub_begin_random: False # flag to pick a sub interval at random
+    features_sub_begin_random: True # flag to pick a sub interval at random
     features_additive_noise_std: 0  # add i.i.d. noise
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntrain:    1024
@@ -23,21 +23,28 @@ data:
     autoencoder_latent_dim: 16  # e.g., 2, 4, 16, 64, 125
 
 net:
-    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet', 'TransformerNet'
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
     dropout: #0.2
 
-    conv_layer_sizes:
-        - 8
-        - 16
-        - 32
+#   type: 'MLPNet'
+#   dense_layer_sizes:
+#       - 128
+#       - 128
+#       - 128
+#       - 128
 
-    dense_layer_sizes:
-        - 128
-        - 128
-        - 128
-        - 128
+#   type: 'ConvNet'
+#   conv_layer_sizes:
+#       - 8
+#       - 16
+#       - 32
+#   dense_layer_sizes:
+#       - 128
+#       - 128
+#       - 128
+#       - 128
 
+    type: 'MLPResNet'
     residual_blocks_sizes:
         -
             - 32
@@ -60,14 +67,16 @@ net:
             - 128
             - 32
 
-   #embedding_size: 128
-   #attention_layers_n_heads:
-   #    - 8
-   #    - 8
-   #    - 8
-   #    - 8
-   #    - 8
-   #    - 8
+#   type: 'TransformerNet'
+#   embedding_size: 128
+#   attention_layers_n_heads:
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#   patch_size: 50
 
 optimizer:
     type: 'AdamW'  # 'Adam', 'AdamW'

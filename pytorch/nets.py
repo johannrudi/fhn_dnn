@@ -7,9 +7,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from dlkit.nets.mlp import (MLPNet, MLPNet_MultIn, MLPResNet)
+from dlkit.nets.mlp import (
+        MLPNet,
+        MLPNet_MultIn,
+        MLPResNet
+)
 from dlkit.nets.conv1d import ConvNet
-from dlkit.nets.transformer1d import TransformerNet
+from dlkit.nets.transformer1d import (
+        TransformerNet,
+        ChannelWiseTransformerNet
+)
 from dlkit.nets.autoencoder import Autoencoder
 from dlkit.nets.unet import UNet1d_2021 as UNet
 from dlkit.nets.unet import EncoderNet1d_2021 as EncoderConvNet
@@ -104,21 +111,35 @@ def _create_convNet(params, logger):
 def _create_transformerNet(params, logger):
     net_params = params['net']
     if params['data']['autoencoder_load_dir']:
-        input_size = params['data']['autoencoder_latent_dim']
+        input_size     = params['data']['autoencoder_latent_dim']
+        input_channels = 1
     else:
-        input_size = math.prod(params['data']['num_features'])
+        assert 2 == len(params['data']['num_features'])
+        input_size     = params['data']['num_features'][1]
+        input_channels = params['data']['num_features'][0]
+    patch_size   = net_params.get('patch_size', input_size//10)
     output_size  = params['data']['num_targets']
     embed_size   = net_params.get('embedding_size')
     attn_n_heads = net_params.get('attention_layers_n_heads')
-    return TransformerNet(
-            input_seq_size = input_size,
-            patch_size     = 50,                #TODO define config param
-            embedding_size = embed_size,
-            attn_n_heads   = attn_n_heads[0],   #TODO use all entries in list, not just the first one
-            num_layers     = len(attn_n_heads), #TODO utilize list, not just the length
-            output_size    = output_size,
-            dropout=net_params['dropout'] if net_params['dropout'] else 0.0
-    )
+    if 1 == input_channels:
+        return TransformerNet(
+                input_seq_size = input_size,
+                output_size    = output_size,
+                patch_size     = patch_size,
+                embedding_size = embed_size,
+                attn_n_heads   = attn_n_heads,
+                dropout=net_params['dropout'] if net_params['dropout'] else 0.0
+        )
+    else:
+        return ChannelWiseTransformerNet(
+                input_channels = input_channels,
+                input_seq_size = input_size,
+                output_size    = output_size,
+                patch_size     = patch_size,
+                embedding_size = embed_size,
+                attn_n_heads   = attn_n_heads,
+                dropout=net_params['dropout'] if net_params['dropout'] else 0.0
+        )
 
 def create_network(params, logger):
     net_params = params['net']
