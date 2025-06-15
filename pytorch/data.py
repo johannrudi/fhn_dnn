@@ -108,7 +108,7 @@ def _load_and_split_arrays(data_params):
             features_test = np.load(data_dir/file_names['features_test'])
             if features_use_channels_range is not None:
                 assert 2 == len(features_use_channels_range), len(features_use_channels_range)
-                start, stop   = features_use_channels_range
+                start, stop = features_use_channels_range
                 features_     = features_[:,start:stop,:]
                 features_test = features_test[:,start:stop,:]
             if features_use_length_range is not None:
@@ -137,8 +137,18 @@ def _load_and_split_arrays(data_params):
             raise ValueError(f"Unknown {targets_type=}")
         # load features of noise
         if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_noise_     = np.expand_dims( np.load(data_dir/file_names['features_noise']), axis=1 )
-            features_noise_test = np.expand_dims( np.load(data_dir/file_names['features_noise_test']), axis=1 )
+            features_noise_     = np.load(data_dir/file_names['features_noise'])
+            features_noise_test = np.load(data_dir/file_names['features_noise_test'])
+            if features_use_channels_range is not None:
+                assert 2 == len(features_use_channels_range), len(features_use_channels_range)
+                start, stop = features_use_channels_range
+                features_noise_     = features_noise_[:,start:stop,:]
+                features_noise_test = features_noise_test[:,start:stop,:]
+            if features_use_length_range is not None:
+                assert 2 == len(features_use_length_range), len(features_use_length_range)
+                start, stop = features_use_length_range
+                features_noise_     = features_noise_[:,:,start:stop]
+                features_noise_test = features_noise_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_noise_test.shape[0]
         elif features_type in ['TIME'.casefold(), 'ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
