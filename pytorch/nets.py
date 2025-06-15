@@ -49,12 +49,13 @@ def _create_MLPNet(params, logger):
     else:
         input_size = params['data']['num_features'][1]
     output_size = params['data']['num_targets']
+    use_dropout = net_params.get('dropout', False)
     return MLPNet(
             input_size,
             output_size,
             hidden_layers_sizes      = net_params['dense_layer_sizes'],
             hidden_layers_activation = _get_activation(net_params['activation_fn']),
-            use_dropout              = net_params['dropout'],
+            use_dropout              = use_dropout,
             output_layer_activation  = None
     )
 
@@ -67,6 +68,7 @@ def _create_MLPResNet(params, logger):
     output_size  = params['data']['num_targets']
     embed_size   = net_params.get('embedding_size', 1)
     attn_n_heads = net_params.get('attention_layers_n_heads', None)
+    use_dropout  = net_params.get('dropout', False)
     return MLPResNet(
             input_size,
             output_size,
@@ -76,7 +78,7 @@ def _create_MLPResNet(params, logger):
             attention_blocks_activation      = _get_activation(net_params['activation_fn']),
             residual_blocks_sizes            = net_params['residual_blocks_sizes'],
             residual_blocks_activation       = _get_activation(net_params['activation_fn']),
-            use_dropout                      = net_params['dropout'],
+            use_dropout                      = use_dropout,
             output_layer_activation          = None
     )
 
@@ -95,6 +97,7 @@ def _create_convNet(params, logger):
                                         padding=hidden_conv_layers_kwargs['padding'])
     n_channels = net_params['conv_layer_sizes'][-1] * params['data']['num_features'][0]
     n_features = n_features * n_channels
+    use_dropout = net_params.get('dropout', False)
     return ConvNet(
             params['data']['num_features'][0], # input_channels
             hidden_conv_layers_channels_mult=net_params['conv_layer_sizes'],
@@ -106,7 +109,7 @@ def _create_convNet(params, logger):
             hidden_dense_layers_activation=_get_activation(net_params['activation_fn']),
             output_size=params['data']['num_targets'],
             output_layer_activation=None,
-            use_dropout=net_params['dropout']
+            use_dropout=use_dropout
     )
 
 def _create_efficientNet(params, logger):
@@ -119,12 +122,13 @@ def _create_efficientNet(params, logger):
         input_size     = params['data']['num_features'][1]
         input_channels = params['data']['num_features'][0]
     output_size = params['data']['num_targets']
+    use_dropout = net_params.get('dropout', False)
     return EfficientNet1D(
-            input_channels=input_channels,
-            input_length=input_size,
-            num_classes=output_size,
-            dropout_connect=net_params['dropout'] if net_params['dropout'] else 0.0,
-            dropout_head=net_params['dropout'] if net_params['dropout'] else 0.0
+            input_channels  = input_channels,
+            input_length    = input_size,
+            num_classes     = output_size,
+            dropout_connect = use_dropout if use_dropout else 0.0,
+            dropout_head    = use_dropout if use_dropout else 0.0
     )
 
 def _create_transformerNet(params, logger):
@@ -140,6 +144,7 @@ def _create_transformerNet(params, logger):
     output_size  = params['data']['num_targets']
     embed_size   = net_params.get('embedding_size')
     attn_n_heads = net_params.get('attention_layers_n_heads')
+    use_dropout  = net_params.get('dropout', False)
     if 1 == input_channels:
         return TransformerNet(
                 input_seq_size = input_size,
@@ -147,7 +152,7 @@ def _create_transformerNet(params, logger):
                 patch_size     = patch_size,
                 embedding_size = embed_size,
                 attn_n_heads   = attn_n_heads,
-                dropout=net_params['dropout'] if net_params['dropout'] else 0.0
+                dropout        = use_dropout if use_dropout else 0.0
         )
     else:
         return ChannelWiseTransformerNet(
@@ -157,7 +162,7 @@ def _create_transformerNet(params, logger):
                 patch_size     = patch_size,
                 embedding_size = embed_size,
                 attn_n_heads   = attn_n_heads,
-                dropout=net_params['dropout'] if net_params['dropout'] else 0.0
+                dropout        = use_dropout if use_dropout else 0.0
         )
 
 def create_network(params, logger):
