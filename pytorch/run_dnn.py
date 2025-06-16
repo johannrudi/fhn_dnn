@@ -14,7 +14,6 @@ from dlkit.log.log_util import (
     logging_get_logger
 )
 from dlkit.nets.util import print_parameters
-from dlkit.opt.scheduler import create_learning_rate_scheduler
 from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
@@ -35,7 +34,14 @@ from data import (
     postprocess_targets,
     create_dataloader
 )
-from nets import create_network, create_ae
+from nets import (
+    create_network,
+    create_ae
+)
+from opt_utils import (
+    create_optimizer,
+    create_lr_scheduler
+)
 
 ###############################################################################
 
@@ -182,39 +188,10 @@ def run(args, params):
         print('<train>')
 
         # create optimizer
-        if 'Adam'.casefold() == params['optimizer']['type'].casefold():
-            optimizer = torch.optim.Adam(
-                    net.parameters(),
-                    lr    = params['optimizer']['learning_rate'],
-                    betas = (params['optimizer']['beta1'], params['optimizer']['beta2']),
-                    eps   = params['optimizer']['epsilon']
-            )
-        elif 'AdamW'.casefold() == params['optimizer']['type'].casefold():
-            optimizer = torch.optim.AdamW(
-                    net.parameters(),
-                    lr           = params['optimizer']['learning_rate'],
-                    betas        = (params['optimizer']['beta1'], params['optimizer']['beta2']),
-                    eps          = params['optimizer']['epsilon'],
-                    weight_decay = params['optimizer']['weight_decay']
-            )
-        else:
-            raise ValueError('Unknown name for optimizer: '+params['optimizer']['type'])
+        optimizer = create_optimizer(net, params['optimizer'])
 
         # create learning rate scheduler
-        if 'learning_rate_scheduler' in params['optimizer'] and \
-           params['optimizer']['learning_rate_scheduler'] is not None:
-            params_lr_scheduler = params['optimizer']['learning_rate_scheduler']
-            lr_scheduler = create_learning_rate_scheduler(
-                    optimizer,
-                    params['training']['epochs'],
-                    params['optimizer']['learning_rate'],
-                    linear_epochs       = params_lr_scheduler['linear_epochs'],
-                    constant_epochs     = params_lr_scheduler['constant_epochs'],
-                    init_learning_rate  = params_lr_scheduler['init_learning_rate'],
-                    final_learning_rate = params_lr_scheduler['final_learning_rate'],
-            )
-        else:
-            lr_scheduler = None
+        lr_scheduler = create_lr_scheduler(optimizer, params['optimizer'], params['training']['epochs'])
 
         # set loss function
         loss_fn = torch.nn.MSELoss()
