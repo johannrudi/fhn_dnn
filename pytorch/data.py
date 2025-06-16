@@ -274,6 +274,7 @@ def _log_transform(data, shift=0.0):
             data[key] = np.log(shift + data[key])
     else:
         data = np.log(shift + data)
+    return data
 
 def _log_transform_inverse(data, shift=0.0):
     """ Applies inverse of log-transform for postprocessing. """
@@ -282,6 +283,7 @@ def _log_transform_inverse(data, shift=0.0):
             data[key] = np.exp(data[key]) - shift
     else:
         data = np.exp(data) - shift
+    return data
 
 def _apply_scale(data, scale):
     """ Applies scale for preprocessing. """
@@ -290,6 +292,7 @@ def _apply_scale(data, scale):
             data[key] = (data[key] - scale['shift']) * (1.0/scale['mult'])
     else:
         data = (data - scale['shift']) * (1.0/scale['mult'])
+    return data
 
 def _apply_scale_inverse(data, scale):
     """ Applies inverse scale for postprocessing. """
@@ -298,6 +301,7 @@ def _apply_scale_inverse(data, scale):
             data[key] = data[key] * scale['mult'] + scale['shift']
     else:
         data = data * scale['mult'] + scale['shift']
+    return data
 
 def preprocess_features(features, params, logger, scale=None, array_name='features'):
     # exit if nothing to do
@@ -309,7 +313,7 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
         pass
     elif features_type == 'RATE_DURATION'.casefold():
         for key in features.keys():
-            _log_transform(features[key][...,1], shift=1.0)
+            features[key][...,1] = _log_transform(features[key][...,1], shift=1.0)
     else:
         raise NotImplementedError(f"Unknown {features_type=}")
     # calculate scaling
@@ -342,7 +346,7 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
             raise NotImplementedError(f"Unknown {features_type=}")
     # apply scaling
     logger.info(f"{array_name} scale = {scale}")
-    _apply_scale(features, scale)
+    features = _apply_scale(features, scale)
     # replace nan values
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
        pass
@@ -361,9 +365,9 @@ def postprocess_features(features, scale, params):
     features_type = params['data']['features_type'].casefold()
     # apply inverse scaling
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
-        _apply_scale_inverse(features, scale)
+        features = _apply_scale_inverse(features, scale)
     elif features_type == 'RATE_DURATION'.casefold():
-        _apply_scale_inverse(features, scale)
+        features = _apply_scale_inverse(features, scale)
         #TODO apply inverse transforms
         raise NotImplementedError()
     else:
@@ -381,7 +385,7 @@ def preprocess_targets(targets, params, logger, scale=None, array_name='targets'
         }
     # apply scaling
     logger.info(f"{array_name} scale = {scale}")
-    _apply_scale(targets, scale)
+    targets = _apply_scale(targets, scale)
     # return scale
     return scale
 
@@ -390,7 +394,7 @@ def postprocess_targets(targets, scale):
     if dictarray_is_none(targets):
         return None
     # apply inverse scaling
-    _apply_scale_inverse(targets, scale)
+    targets = _apply_scale_inverse(targets, scale)
 
 ###############################################################################
 
@@ -412,17 +416,17 @@ def get_conditional_positions(features: np.ndarray, params):
         'n_bins': {
             'TIME':     None,
             'RATE':     1000,
-            'DURATION':  100,
+            'DURATION':   25,
         },
         'range': {
             'TIME':     None,
-            'RATE':     [ 0.5, 1.0],
+            'RATE':     [ 0.7, 0.99],
             'DURATION': [-0.5, 0.5],
         },
         'relevant_bins_threshold': {
             'TIME':     None,
             'RATE':     features.shape[0] * 0.06,
-            'DURATION': features.shape[0] * 0.02,
+            'DURATION': features.shape[0] * 0.01,
         }
     }
     # extract conditional positions
