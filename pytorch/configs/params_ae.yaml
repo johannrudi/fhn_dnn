@@ -14,7 +14,7 @@ data:
     eval_batch_size:  256
     random_seed: 123
     # latent space of encoder output / decoder input [ONLY FOR MLP NET]
-    latent_dim: 16  # e.g., 4, 8, 16, 32, 64
+    latent_size: 16  # e.g., 4, 8, 16, 32, 64
 
 e_net:
     type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
