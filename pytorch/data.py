@@ -410,6 +410,8 @@ def _get_positions_from_histogram(data, range, n_bins, relevant_bins_threshold):
     return cond_positions
 
 def get_conditional_positions(features: np.ndarray, params):
+    """ Tuned for data set 2020-12-09. """
+    data_dir      = params['data']['data_dir']
     features_type = params['data']['features_type'].casefold()
     # set function parameters
     fn_params = {
@@ -420,8 +422,8 @@ def get_conditional_positions(features: np.ndarray, params):
         },
         'range': {
             'TIME':     None,
-            'RATE':     [ 0.7, 0.99],
-            'DURATION': [-0.5, 0.5],
+            'RATE':     [ 0.55, 0.95],
+            'DURATION': [-0.50, 0.50],
         },
         'relevant_bins_threshold': {
             'TIME':     None,
@@ -435,13 +437,17 @@ def get_conditional_positions(features: np.ndarray, params):
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
         raise NotImplementedError()
     elif 'RATE_DURATION'.casefold() == features_type:
-        for i, key in enumerate(['RATE', 'DURATION']):
-            cond_positions.append(_get_positions_from_histogram(
-                    features[...,i],
-                    fn_params['range'][key],
-                    fn_params['n_bins'][key],
-                    fn_params['relevant_bins_threshold'][key]
-            ))
+        if '2020' in data_dir:
+            cond_positions.append(np.array([ 0.60,  0.70,  0.80,  0.90]))
+            cond_positions.append(np.array([-0.36, -0.34, -0.26, -0.18, -0.17]))
+        else:  # otherwise find values from histogram
+            for i, key in enumerate(['RATE', 'DURATION']):
+                cond_positions.append(_get_positions_from_histogram(
+                        features[...,i],
+                        fn_params['range'][key],
+                        fn_params['n_bins'][key],
+                        fn_params['relevant_bins_threshold'][key]
+                ))
     else:
         raise ValueError(f"Unknown features_type: {features_type}")
     return cond_positions
@@ -470,7 +476,7 @@ def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position,
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
         raise NotImplementedError()
     elif 'RATE_DURATION'.casefold() == features_type:
-        threshold = [0.01, 0.10]
+        threshold = [0.05, 0.15]
         features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
     else:
         raise ValueError(f"Unknown features_type: {features_type}")
