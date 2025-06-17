@@ -7,11 +7,12 @@ data:
     features_use_channels_range:
         - 0
         - 1
-    features_scale_to_normal: False # scale features to have zero mean and unit std
+    features_normalize: False       # scale features to have zero mean and unit std
     features_sub_length: 1000       # use sub interval of this size
     features_sub_begin_random: True # flag to pick a sub interval at random
     features_additive_noise_std: 0  # add i.i.d. noise
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
+    targets_normalize: False        # scale targets to have zero mean and unit std
     Ntrain:    1024
     Nvalidate: 1000
     Ntest:     2000

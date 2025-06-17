@@ -2,8 +2,8 @@
 Handling of data.
 """
 
+import inspect, logging, pathlib, os, sys
 import numpy as np
-import os, pathlib, sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import ModeKeys
@@ -27,7 +27,12 @@ def dictarray_is_not_none(arr):
 
 ###############################################################################
 
-def _load_and_split_arrays(data_params):
+def _load_and_split_arrays(data_params, logger=None):
+    # set up logger
+    if logger is None:
+        logger = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
+
+    # set options
     features_type = data_params['features_type'].casefold()
     targets_type  = data_params.get('targets_type', 'N/A').casefold()
     data_dir      = pathlib.Path(data_params['data_dir'])
@@ -62,12 +67,14 @@ def _load_and_split_arrays(data_params):
             features_     = np.expand_dims( np.load(data_dir/'fhn_T200_samplePrior_state0.npy'), axis=1 )
             features_     = features_[:-Ntest,...]
             features_test = features_[-Ntest:,...]
+            logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
             rate          = np.load(data_dir/'fhn_T200_samplePrior_spikeRate.npy')
             duration      = np.load(data_dir/'fhn_T200_samplePrior_spikeDuration.npy')
             features_     = np.expand_dims( np.stack((rate, duration), axis=1), axis=1 )
             features_     = features_[:-Ntest,...]
             features_test = features_[-Ntest:,...]
+            logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type == 'NOISE'.casefold():
             pass
         else:
@@ -77,6 +84,7 @@ def _load_and_split_arrays(data_params):
             targets_     = np.load(data_dir/'fhn_T200_samplePrior_theta.npy')
             targets_     = targets_[:-Ntest,...]
             targets_test = targets_[-Ntest:,...]
+            logger.debug(f"{targets_type=}, {targets_.shape=}, {targets_test.shape=}")
         elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
@@ -86,6 +94,7 @@ def _load_and_split_arrays(data_params):
             features_noise_     = np.expand_dims( np.load(data_dir/'noise_correlated_Nt1000_Nsim10000_data.npy'), axis=1 )
             features_noise_     = features_noise_[:-Ntest,...]
             features_noise_test = features_noise_[-Ntest:,...]
+            logger.debug(f"{features_type=}, {features_noise_.shape=}, {features_noise_test.shape=}")
         elif features_type in ['TIME'.casefold(), 'ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
             pass
         else:
@@ -97,6 +106,7 @@ def _load_and_split_arrays(data_params):
             targets_noise_     = np.stack((noise_correl, noise_stddev), axis=1)
             targets_noise_     = targets_noise_[:-Ntest,...]
             targets_noise_test = targets_noise_[-Ntest:,...]
+            logger.debug(f"{targets_type=}, {targets_noise_.shape=}, {targets_noise_test.shape=}")
         elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
@@ -118,11 +128,13 @@ def _load_and_split_arrays(data_params):
                 features_test = features_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_test.shape[0]
+            logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
             features_     = np.expand_dims( np.load(data_dir/file_names['features_stats']), axis=1 )
             features_test = np.expand_dims( np.load(data_dir/file_names['features_stats_test']), axis=1 )
             if Ntest is None:
                 Ntest = features_test.shape[0]
+            logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type == 'NOISE'.casefold():
             pass
         else:
@@ -131,6 +143,7 @@ def _load_and_split_arrays(data_params):
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
             targets_     = np.load(data_dir/file_names['targets'])
             targets_test = np.load(data_dir/file_names['targets_test'])
+            logger.debug(f"{targets_type=}, {targets_.shape=}, {targets_test.shape=}")
         elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
@@ -151,6 +164,7 @@ def _load_and_split_arrays(data_params):
                 features_noise_test = features_noise_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_noise_test.shape[0]
+            logger.debug(f"{features_type=}, {features_noise_.shape=}, {features_noise_test.shape=}")
         elif features_type in ['TIME'.casefold(), 'ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
             pass
         else:
@@ -159,6 +173,7 @@ def _load_and_split_arrays(data_params):
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
             targets_noise_     = np.load(data_dir/file_names['targets_noise'])
             targets_noise_test = np.load(data_dir/file_names['targets_noise_test'])
+            logger.debug(f"{targets_type=}, {targets_noise_.shape=}, {targets_noise_test.shape=}")
         elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
@@ -267,23 +282,23 @@ def load_timesteps(params):
 
 ###############################################################################
 
-def _log_transform(data, shift=0.0):
-    """ Applies log-transform for preprocessing. """
-    if isinstance(data, dict):
-        for key in data.keys():
-            data[key] = np.log(shift + data[key])
-    else:
-        data = np.log(shift + data)
-    return data
+#def _log_transform(data, shift=0.0):
+#    """ Applies log-transform for preprocessing. """
+#    if isinstance(data, dict):
+#        for key in data.keys():
+#            data[key] = np.log(shift + data[key])
+#    else:
+#        data = np.log(shift + data)
+#    return data
 
-def _log_transform_inverse(data, shift=0.0):
-    """ Applies inverse of log-transform for postprocessing. """
-    if isinstance(data, dict):
-        for key in data.keys():
-            data[key] = np.exp(data[key]) - shift
-    else:
-        data = np.exp(data) - shift
-    return data
+#def _log_transform_inverse(data, shift=0.0):
+#    """ Applies inverse of log-transform for postprocessing. """
+#    if isinstance(data, dict):
+#        for key in data.keys():
+#            data[key] = np.exp(data[key]) - shift
+#    else:
+#        data = np.exp(data) - shift
+#    return data
 
 def _apply_scale(data, scale):
     """ Applies scale for preprocessing. """
@@ -308,51 +323,51 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
     if dictarray_is_none(features):
         return None
     features_type = params['data']['features_type'].casefold()
-    # apply transformation
-    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
-        pass
-    elif features_type == 'RATE_DURATION'.casefold():
-        for key in features.keys():
-            features[key][...,1] = _log_transform(features[key][...,1], shift=1.0)
-    else:
-        raise NotImplementedError(f"Unknown {features_type=}")
-    # calculate scaling
+# DEV
+#   # apply transformation
+#   if features_type == 'RATE_DURATION'.casefold():
+#       for key in features.keys():
+#           features[key][...,1] = _log_transform(features[key][...,1], shift=1.0)
+#/DEV
+    # calculate scaling for normalization
     if scale is None:
-        if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
-            if params['data'].get('features_scale_to_normal', False):
+        scale = {
+            'shift': 0.0,
+            'mult':  1.0
+        }
+        if params['data'].get('features_normalize', False):
+            if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+                assert 3 == features['train'].ndim
                 scale = {
                     'shift': np.mean(features['train'], axis=(0,2), keepdims=True),
                     'mult' : np.std (features['train'], axis=(0,2), keepdims=True)
                 }
-            else:
+            elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
+                assert 3 == features['train'].ndim
+                assert 1 == features['train'].shape[1]
                 scale = {
-                    'shift': 0.0,
-                    'mult':  1.0
+                    'shift': np.nanmean(features['train'], axis=0, keepdims=True),
+                    'mult' : np.nanstd (features['train'], axis=0, keepdims=True)
                 }
-        elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
-            assert 3 == features['train'].ndim
-            assert 1 == features['train'].shape[1]
-            scale = {
-                'shift': np.nanmean(features['train'], axis=0, keepdims=True),
-                'mult' : np.nanstd (features['train'], axis=0, keepdims=True)
-            }
-            # override scaling of "spike rate"
-            if 'RATE_DURATION'.casefold() == features_type:
-                features_min = np.nanmin(features['train'], axis=0, keepdims=True)
-                features_max = np.nanmax(features['train'], axis=0, keepdims=True)
-                scale['shift'][...,0] = features_min[...,0]
-                scale['mult'][...,0]  = features_max[...,0] - features_min[...,0]
-        else:
-            raise NotImplementedError(f"Unknown {features_type=}")
+# DEV
+#               # override scaling of "spike rate"
+#               if 'RATE_DURATION'.casefold() == features_type:
+#                   features_min = np.nanmin(features['train'], axis=0, keepdims=True)
+#                   features_max = np.nanmax(features['train'], axis=0, keepdims=True)
+#                   scale['shift'][...,0] = features_min[...,0]
+#                   scale['mult'][...,0]  = features_max[...,0] - features_min[...,0]
+#/DEV
+            else:
+                raise NotImplementedError(f"Unknown {features_type=}")
     # apply scaling
     logger.info(f"{array_name} scale = {scale}")
     features = _apply_scale(features, scale)
     # replace nan values
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
-       pass
+        pass
     elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
         for key in features.keys():
-            features[key] = np.where(np.isnan(features[key]), -1.0, features[key])
+            features[key] = np.where(np.isnan(features[key]), -10.0, features[key])
     else:
         raise NotImplementedError(f"Unknown {features_type=}")
     # return scale
@@ -364,25 +379,31 @@ def postprocess_features(features, scale, params):
         return
     features_type = params['data']['features_type'].casefold()
     # apply inverse scaling
-    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
-        features = _apply_scale_inverse(features, scale)
-    elif features_type == 'RATE_DURATION'.casefold():
-        features = _apply_scale_inverse(features, scale)
-        #TODO apply inverse transforms
-        raise NotImplementedError()
-    else:
-        raise NotImplementedError(f"Unknown {features_type=}")
+    features = _apply_scale_inverse(features, scale)
+# DEV
+#   # apply inverse scaling
+#   if features_type == 'RATE_DURATION'.casefold():
+#       features = _apply_scale_inverse(features, scale)
+#       #TODO apply inverse transforms
+#       raise NotImplementedError()
+#/DEV
 
 def preprocess_targets(targets, params, logger, scale=None, array_name='targets'):
     # exit if nothing to do
     if dictarray_is_none(targets):
         return None
-    # calculate scaling
+    # calculate scaling for normalization
     if scale is None:
         scale = {
-            'shift': np.mean(targets['train'], axis=0, keepdims=True),
-            'mult' : np.std (targets['train'], axis=0, keepdims=True)
+            'shift': 0.0,
+            'mult':  1.0
         }
+        if params['data'].get('targets_normalize', False):
+            assert 2 == targets['train'].ndim
+            scale = {
+                'shift': np.mean(targets['train'], axis=0, keepdims=True),
+                'mult' : np.std (targets['train'], axis=0, keepdims=True)
+            }
     # apply scaling
     logger.info(f"{array_name} scale = {scale}")
     targets = _apply_scale(targets, scale)
@@ -392,7 +413,7 @@ def preprocess_targets(targets, params, logger, scale=None, array_name='targets'
 def postprocess_targets(targets, scale):
     # exit if nothing to do
     if dictarray_is_none(targets):
-        return None
+        return
     # apply inverse scaling
     targets = _apply_scale_inverse(targets, scale)
 
@@ -422,8 +443,10 @@ def get_conditional_positions(features: np.ndarray, params):
         },
         'range': {
             'TIME':     None,
-            'RATE':     [ 0.55, 0.95],
-            'DURATION': [-0.50, 0.50],
+#           'RATE':     [ 0.55, 0.95],
+#           'DURATION': [-0.50, 0.50],
+            'RATE':     [-0.5, 1.0],
+            'DURATION': [-0.5, 0.5],
         },
         'relevant_bins_threshold': {
             'TIME':     None,
@@ -438,8 +461,13 @@ def get_conditional_positions(features: np.ndarray, params):
         raise NotImplementedError()
     elif 'RATE_DURATION'.casefold() == features_type:
         if '2020' in data_dir:
-            cond_positions.append(np.array([ 0.60,  0.70,  0.80,  0.90]))
-            cond_positions.append(np.array([-0.36, -0.34, -0.26, -0.18, -0.17]))
+#           cond_positions.append(np.array([ 0.60,  0.70,  0.80,  0.90]))
+#           cond_positions.append(np.array([-0.36, -0.34, -0.26, -0.18, -0.17]))
+            cond_positions.append(np.array([-0.4205, 0.1795, 0.7795]))
+            cond_positions.append(np.array([-0.34, -0.3, -0.26, -0.22]))
+        elif '2025' in data_dir:
+            cond_positions.append(np.array([-0.419, 0.175, 0.769]))
+            cond_positions.append(np.array([-0.5, -0.26, 0.22, 0.46]))
         else:  # otherwise find values from histogram
             for i, key in enumerate(['RATE', 'DURATION']):
                 cond_positions.append(_get_positions_from_histogram(
@@ -476,7 +504,8 @@ def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position,
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
         raise NotImplementedError()
     elif 'RATE_DURATION'.casefold() == features_type:
-        threshold = [0.05, 0.15]
+#       threshold = [0.05, 0.15]
+        threshold = [0.6, 0.6]
         features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
     else:
         raise ValueError(f"Unknown features_type: {features_type}")
