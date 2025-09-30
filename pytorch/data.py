@@ -457,9 +457,12 @@ def get_conditional_positions(features: np.ndarray, params):
     # extract conditional positions
     assert 1 < features.shape[0]
     cond_positions = list()
-    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+        # set indices of samples as positions for conditionals
+        cond_positions.append(np.arange(features.shape[0] - 6, features.shape[0], dtype=np.int32))
+    elif features_type == 'ODE_STATS'.casefold():
         raise NotImplementedError()
-    elif 'RATE_DURATION'.casefold() == features_type:
+    elif features_type == 'RATE_DURATION'.casefold():
         if '2020' in data_dir:
 #           cond_positions.append(np.array([ 0.60,  0.70,  0.80,  0.90]))
 #           cond_positions.append(np.array([-0.36, -0.34, -0.26, -0.18, -0.17]))
@@ -481,14 +484,25 @@ def get_conditional_positions(features: np.ndarray, params):
     return cond_positions
 
 def _filter_samples(features, targets, position, threshold):
-    for i, (pos, thresh) in enumerate(zip(position, threshold)):
-        features_ = features[...,i].flatten()
-        idx_thresh = np.logical_and((pos - thresh) < features_, features_ < (pos + thresh))
-        if 0 == i:
-            indices = idx_thresh
-        else:
-            indices = np.logical_and(indices, idx_thresh)
+    # filter features
+    if features.shape[-1] == len(position):
+        # if as many positions as features: threshold positions across all features
+        for i, (pos, thresh) in enumerate(zip(position, threshold)):
+            features_ = features[...,i].flatten()
+            idx_thresh = np.logical_and((pos - thresh) < features_, features_ < (pos + thresh))
+            if 0 == i:
+                indices = idx_thresh
+            else:
+                indices = np.logical_and(indices, idx_thresh)
+    elif 1 == len(position) and features.shape[1:] == position[0].shape[1:]:
+        # if positions are samples: threshold by the normed distance to samples
+        sample = position[0]
+        thresh = threshold[0]
+        assert 1 == sample.shape[0]
+        distances = np.linalg.norm(features - sample, axis=(1, 2))
+        indices = np.where(distances < thresh)[0]
     features_filtered = features[indices]
+    # apply filter to targets
     if 2 == targets.ndim:
         targets_filtered = targets[indices]
     elif 3 == targets.ndim:
@@ -501,10 +515,13 @@ def get_conditional_samples(features: np.ndarray, targets: np.ndarray, position,
     features_type = params['data']['features_type'].casefold()
     # extract conditional samples
     assert 1 < features.shape[0]
-    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold(), 'ODE_STATS'.casefold()]:
+    if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
+        threshold = [0.01 * np.prod(features.shape[1:])]
+        features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
+    elif features_type == 'ODE_STATS'.casefold():
         raise NotImplementedError()
-    elif 'RATE_DURATION'.casefold() == features_type:
-#       threshold = [0.05, 0.15]
+    elif features_type == 'RATE_DURATION'.casefold():
+        #threshold = [0.05, 0.15]
         threshold = [0.6, 0.6]
         features_cond, targets_cond = _filter_samples(features, targets, position, threshold)
     else:
