@@ -27,6 +27,27 @@ def dictarray_is_not_none(arr):
 
 ###############################################################################
 
+def _load_memmap(data_file, cols_num, dtype=np.float32):
+    data_points = cols_num
+    data_file_size = os.path.getsize(data_file)
+    data_rows = data_file_size // (data_points * 4)
+    return np.memmap(
+        data_file,
+        dtype=dtype,
+        mode='r',
+        shape=(data_rows, data_points)
+    )
+
+def _load_array(data_file, cols_num=None, dtype=np.float32):
+    try:
+        # load assuming a regular numpy array
+        return np.load(data_file)
+    except ValueError:
+        # instead, load using memmap
+        assert cols_num is not None
+        assert dtype is not None
+        return _load_memmap(data_file, cols_num=cols_num, dtype=dtype)
+
 def _load_and_split_arrays(data_params, logger=None):
     # set up logger
     if logger is None:
@@ -114,8 +135,12 @@ def _load_and_split_arrays(data_params, logger=None):
     elif '2025' in data_dir.name:
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_     = np.load(data_dir/file_names['features'])
-            features_test = np.load(data_dir/file_names['features_test'])
+            features_ = _load_array(data_dir/file_names['features'])
+            features_test = _load_array(data_dir/file_names['features_test'])
+            # DEV data of AlonsoMarder model
+            # features_ = _load_array(file_names['features'], cols_num=600000)[:,None,:] # TODO change the data dimensions, instead of this hack
+            # features_test = _load_array(file_names['features_test'], cols_num=600000)[:,None,:] # TODO change the data dimensions, instead of this hack
+            # /DEV
             if features_use_channels_range is not None:
                 assert 2 == len(features_use_channels_range), len(features_use_channels_range)
                 start, stop = features_use_channels_range
@@ -130,8 +155,12 @@ def _load_and_split_arrays(data_params, logger=None):
                 Ntest = features_test.shape[0]
             logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
-            features_     = np.expand_dims( np.load(data_dir/file_names['features_stats']), axis=1 )
-            features_test = np.expand_dims( np.load(data_dir/file_names['features_stats_test']), axis=1 )
+            features_     = np.expand_dims( _load_array(data_dir/file_names['features_stats']), axis=1 )
+            features_test = np.expand_dims( _load_array(data_dir/file_names['features_stats_test']), axis=1 )
+            # DEV data of AlonsoMarder model
+            # features_ = _load_array(file_names['features_stats'], cols_num=2)[:,None,:] # TODO change the data dimensions, instead of this hack
+            # features_test = _load_array(file_names['features_stats_test'], cols_num=2)[:,None,:] # TODO change the data dimensions, instead of this hack
+            # /DEV
             if Ntest is None:
                 Ntest = features_test.shape[0]
             logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
@@ -141,8 +170,12 @@ def _load_and_split_arrays(data_params, logger=None):
             raise ValueError(f"Unknown {features_type=}")
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets_     = np.load(data_dir/file_names['targets'])
-            targets_test = np.load(data_dir/file_names['targets_test'])
+            targets_     = _load_array(data_dir/file_names['targets'])
+            targets_test = _load_array(data_dir/file_names['targets_test'])
+            # DEV data of AlonsoMarder model
+            # targets_ = _load_array(file_names['targets'], cols_num=9) # TODO change the data dimensions, instead of this hack
+            # targets_test = _load_array(file_names['targets_test'], cols_num=9) # TODO change the data dimensions, instead of this hack
+            # /DEV
             logger.debug(f"{targets_type=}, {targets_.shape=}, {targets_test.shape=}")
         elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
@@ -544,6 +577,7 @@ class FHN_Dataset(Dataset):
             features_transform_fn=None,
             features_sub_length=None,
             features_sub_begin_random=False,
+            features_sub_step=None,
             noise_idx_random=True,
             item_return_order='yx'
     ):
@@ -576,6 +610,8 @@ class FHN_Dataset(Dataset):
         self.features_sub_begin_random   = features_sub_begin_random
         self.noise_idx_random            = noise_idx_random
         self.item_return_order           = item_return_order.casefold()
+        self.features_sub_step           = features_sub_step
+
 
     def __len__(self):
         if self.features is not None:
@@ -620,6 +656,10 @@ class FHN_Dataset(Dataset):
             idx_end = idx_begin + self.features_sub_length
             features             = features            [...,idx_begin:idx_end]
             features_transformed = features_transformed[...,idx_begin:idx_end]
+        # truncate features with step length
+        if self.features_sub_step and 1 < self.features_sub_step:
+            features             = features            [...,::self.features_sub_step]
+            features_transformed = features_transformed[...,::self.features_sub_step]
         # get target sample
         if self.targets is not None:
             targets = self.targets[idx]
@@ -677,6 +717,7 @@ def create_dataloader(params, logger, mode,
             features_transform_fn       = features_transform_fn,
             features_sub_length         = params['data'].get('features_sub_length', 0),
             features_sub_begin_random   = params['data'].get('features_sub_begin_random', False),
+            features_sub_step           = params['data'].get('features_sub_step'),
             item_return_order           = item_return_order,
             **dataset_kwargs
     )
