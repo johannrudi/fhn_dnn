@@ -11,7 +11,10 @@ from dlkit.nets.mlp import (
         MLPNet_MultIn,
         MLPResNet
 )
-from dlkit.nets.conv1d import ConvNet
+from dlkit.nets.conv1d import (
+    ConvNet,
+    ConvResNet
+)
 from dlkit.nets.efficientnet import EfficientNet1D
 from dlkit.nets.transformer1d import (
         TransformerNet,
@@ -51,9 +54,21 @@ def _create_MLPNet(input_channels, input_size, output_size, net_params, logger):
             output_layer_activation  = None
     )
 
-def _create_MLPResNet(input_channels, input_size, output_size, net_params, logger):
-    embed_size    = net_params.get('embedding_size', 1)
+def _create_MLPResNet(input_channels, input_size, output_size, net_params, logger,
+                      hidden_input_size=0):
     activation_fn = _get_activation(net_params['activation_fn'])
+    embed_size    = net_params.get('embedding_size', 1)
+    # configure hidden inputs to residual blocks
+    if hidden_input_size:
+        residual_blocks_sizes = list(net_params['residual_blocks_sizes'])
+        if isinstance(hidden_input_size, int):
+            hidden_input_size = [hidden_input_size] * len(residual_blocks_sizes)
+        assert len(hidden_input_size) == len(residual_blocks_sizes)
+        for i in range(len(residual_blocks_sizes)):
+            residual_blocks_sizes[i] += hidden_input_size[i]
+    else:
+        residual_blocks_sizes = net_params['residual_blocks_sizes']
+    # create net
     return MLPResNet(
             input_channels*input_size,
             output_size,
@@ -78,7 +93,8 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
                                         stride=hidden_conv_layers_kwargs['stride'],
                                         padding=hidden_conv_layers_kwargs['padding'])
     n_channels = input_channels * net_params['conv_layer_sizes'][-1]
-    dense_input_size = n_channels* n_features
+    flattened_input_size = n_channels * n_features
+    # create net
     return ConvNet(
             # convolutional layers
             input_channels,
@@ -87,7 +103,7 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
             hidden_conv_layers_activation    = activation_fn,
             hidden_conv_layers_kwargs        = hidden_conv_layers_kwargs,
             # dense layers
-            hidden_dense_input_size          = dense_input_size,
+            hidden_dense_input_size          = flattened_input_size,
             hidden_dense_layers_sizes        = net_params['dense_layer_sizes'],
             hidden_dense_layers_activation   = activation_fn,
             # output layer
@@ -95,6 +111,52 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
             output_layer_activation          = None,
             # other
             use_dropout                      = net_params.get('dropout', False)
+    )
+
+def _create_convResNet(input_channels, input_size, output_size, net_params, logger,
+                       mlp_block_hidden_input_size=0):
+    activation_fn = _get_activation(net_params['activation_fn'])
+    use_dropout = net_params.get('dropout', False)
+    # set parameters of convolution block
+    conv_layers_params = {
+        "channels_mult": net_params['conv_layer_sizes'],
+        "kernels": len(net_params['conv_layer_sizes'])*[3],
+        "activation": activation_fn,
+        "use_dropout": use_dropout,
+        "conv_kwargs": {'padding': 1, 'padding_mode': 'replicate', 'stride': 2},
+    }
+    # calculate length of features after convolutional layers
+    n_features = input_size
+    for i, _ in enumerate(net_params['conv_layer_sizes']):
+        n_features = _get_conv1d_length(n_features, conv_layers_params['kernels'][i],
+                                        stride=conv_layers_params['conv_kwargs']['stride'],
+                                        padding=conv_layers_params['conv_kwargs']['padding'])
+    n_channels = input_channels * net_params['conv_layer_sizes'][-1]
+    flattened_input_size = n_channels * n_features
+    # configure hidden inputs to residual blocks
+    if mlp_block_hidden_input_size:
+        residual_blocks_sizes = list(net_params['residual_blocks_sizes'])
+        if isinstance(mlp_block_hidden_input_size, int):
+            mlp_block_hidden_input_size = [mlp_block_hidden_input_size] * len(residual_blocks_sizes)
+        assert len(mlp_block_hidden_input_size) == len(residual_blocks_sizes)
+        for i in range(len(residual_blocks_sizes)):
+            residual_blocks_sizes[i] += mlp_block_hidden_input_size[i]
+    else:
+        residual_blocks_sizes = net_params['residual_blocks_sizes']
+    # set parameters of MLP block
+    mlp_resnet_params = {
+        "input_size": flattened_input_size,
+        "output_size": output_size,
+        "residual_blocks_sizes": residual_blocks_sizes,
+        "residual_blocks_activation": activation_fn,
+        "use_dropout": use_dropout,
+        "output_layer_activation": None,
+    }
+    # create net
+    return ConvResNet(
+            input_channels,
+            conv_layers_params=conv_layers_params,
+            mlp_resnet_params=mlp_resnet_params,
     )
 
 def _create_efficientNet(input_channels, input_size, output_size, net_params, logger):
@@ -153,6 +215,8 @@ def create_network(params, logger):
         net = _create_MLPResNet(input_channels, input_size, output_size, net_params, logger)
     elif NetworkType.CONVNET == net_type:
         net = _create_convNet(input_channels, input_size, output_size, net_params, logger)
+    elif NetworkType.CONVRESNET == net_type:
+        net = _create_convResNet(input_channels, input_size, output_size, net_params, logger)
     elif NetworkType.EFFICIENTNET == net_type:
         net = _create_efficientNet(input_channels, input_size, output_size, net_params, logger)
     elif NetworkType.TRANSFORMERNET == net_type:
@@ -259,28 +323,48 @@ class GNet(nn.Module):
         super().__init__()
         net_type = NetworkType.get_from_name(net_params['type'])
         logger.info(f"Generator network type:     {net_params['type']}, key: {net_type}")
+        self.hidden_input_size = None
         # create network
         if NetworkType.MLPNET == net_type:
             self.net = _create_MLPNet(input_channels, input_size+latent_size, targets_size, net_params, logger)
         elif NetworkType.MLPRESNET == net_type:
-            self.net = _create_MLPResNet(input_channels, input_size+latent_size, targets_size, net_params, logger)
-       #elif NetworkType.CONVNET == net_type:
-       #    self.net = _create_convNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
-       #elif NetworkType.EFFICIENTNET == net_type:
-       #    self.net = _create_efficientNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
-       #elif NetworkType.TRANSFORMERNET == net_type:
-       #    self.net = _create_transformerNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
+            self.hidden_input_size = [0] * len(net_params["residual_blocks_sizes"])
+            self.hidden_input_size[0] = latent_size
+            # TODO ^ the latent_size can also be passed to subsequent layers
+            self.net = _create_MLPResNet(input_channels, input_size, targets_size, net_params, logger,
+                                         hidden_input_size=hidden_input_size)
+        # elif NetworkType.CONVNET == net_type:
+        #     self.net = _create_convNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
+        elif NetworkType.CONVRESNET == net_type:
+            self.hidden_input_size = [0] * len(net_params["residual_blocks_sizes"])
+            self.hidden_input_size[0] = latent_size
+            # TODO ^ the latent_size can also be passed to subsequent layers
+            self.net = _create_convResNet(input_channels, input_size, output_size, net_params, logger,
+                                          mlp_block_hidden_input_size=hidden_input_size)
+        # elif NetworkType.EFFICIENTNET == net_type:
+        #     self.net = _create_efficientNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
+        # elif NetworkType.TRANSFORMERNET == net_type:
+        #     self.net = _create_transformerNet(input_channels+latent_size, input_size, targets_size, net_params, logger)
         else:
             raise NotImplementedError(f"Type {net_type} is not implemented")
 
     def forward(self, y, z):
         n_replica = z.size(0) if z.size(0) != y.size(0) else 0
         if 0 == n_replica:
-            g_out = self.net(y, z)
+            if self.hidden_input_size:
+                g_out = self.net(y, h0=z)
+            else:
+                g_out = self.net(y, z)
         elif 1 == n_replica:
-            g_out = self.net(y, z[0])
+            if self.hidden_input_size:
+                g_out = self.net(y, h0=z[0])
+            else:
+                g_out = self.net(y, z[0])
         elif 1 < n_replica:
-            g_out = torch.vmap( lambda z_: self.net(y, z_) )(z)
+            if self.hidden_input_size:
+                g_out = torch.vmap( lambda z_: self.net(y, h0=z_) )(z)
+            else:
+                g_out = torch.vmap( lambda z_: self.net(y, z_) )(z)
         else:
             raise NotImplementedError(f"{y.size()=}, {z.size()=}")
         return g_out
@@ -296,12 +380,14 @@ class DNet(nn.Module):
             self.net = _create_MLPNet(input_channels, input_size+targets_size, 1, net_params, logger)
         elif NetworkType.MLPRESNET == net_type:
             self.net = _create_MLPResNet(input_channels, input_size+targets_size, 1, net_params, logger)
-       #elif NetworkType.CONVNET == net_type:
-       #    self.net = _create_convNet(input_channels+targets_size, input_size, 1, net_params, logger)
-       #elif NetworkType.EFFICIENTNET == net_type:
-       #    self.net = _create_efficientNet(input_channels+targets_size, input_size, 1, net_params, logger)
-       #elif NetworkType.TRANSFORMERNET == net_type:
-       #    self.net = _create_transformerNet(input_channels+targets_size, input_size, 1, net_params, logger)
+        # elif NetworkType.CONVNET == net_type:
+        #     self.net = _create_convNet(input_channels+targets_size, input_size, 1, net_params, logger)
+        elif NetworkType.CONVRESNET == net_type:
+            raise NotImplementedError(f"Type {net_type} is not implemented")
+        # elif NetworkType.EFFICIENTNET == net_type:
+        #     self.net = _create_efficientNet(input_channels+targets_size, input_size, 1, net_params, logger)
+        # elif NetworkType.TRANSFORMERNET == net_type:
+        #     self.net = _create_transformerNet(input_channels+targets_size, input_size, 1, net_params, logger)
         else:
             raise NotImplementedError(f"Type {net_type} is not implemented")
 
