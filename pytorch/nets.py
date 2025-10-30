@@ -88,8 +88,8 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
     hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
     # calculate length of features after convolutional layers
     n_features = input_size
-    for i, _ in enumerate(net_params['conv_layer_sizes']):
-        n_features = _get_conv1d_length(n_features, hidden_conv_layers_kernels[i],
+    for kernel_size in hidden_conv_layers_kernels:
+        n_features = _get_conv1d_length(n_features, kernel_size,
                                         stride=hidden_conv_layers_kwargs['stride'],
                                         padding=hidden_conv_layers_kwargs['padding'])
     n_channels = input_channels * net_params['conv_layer_sizes'][-1]
@@ -118,19 +118,23 @@ def _create_convResNet(input_channels, input_size, output_size, net_params, logg
     activation_fn = _get_activation(net_params['activation_fn'])
     use_dropout = net_params.get('dropout', False)
     # set parameters of convolution block
-    conv_layers_params = {
+    conv_resnet_params = {
         "channels_mult": net_params['conv_layer_sizes'],
         "kernels": len(net_params['conv_layer_sizes'])*[3],
         "activation": activation_fn,
         "use_dropout": use_dropout,
-        "conv_kwargs": {'padding': 1, 'padding_mode': 'replicate', 'stride': 2},
+        "mlb_kwargs": {
+            'padding': 1,
+            'padding_mode': 'replicate',
+            'stride': 2
+        },
     }
     # calculate length of features after convolutional layers
     n_features = input_size
-    for i, _ in enumerate(net_params['conv_layer_sizes']):
-        n_features = _get_conv1d_length(n_features, conv_layers_params['kernels'][i],
-                                        stride=conv_layers_params['conv_kwargs']['stride'],
-                                        padding=conv_layers_params['conv_kwargs']['padding'])
+    for kernel_size in conv_resnet_params['kernels']:
+        n_features = _get_conv1d_length(n_features, kernel_size,
+                                        stride=conv_resnet_params['mlb_kwargs']['stride'],
+                                        padding=conv_resnet_params['mlb_kwargs']['padding'])
     n_channels = input_channels * net_params['conv_layer_sizes'][-1]
     flattened_input_size = n_channels * n_features
     # configure hidden inputs to residual blocks
@@ -155,7 +159,7 @@ def _create_convResNet(input_channels, input_size, output_size, net_params, logg
     # create net
     return ConvResNet(
             input_channels,
-            conv_layers_params=conv_layers_params,
+            conv_resnet_params=conv_resnet_params,
             mlp_resnet_params=mlp_resnet_params,
     )
 
