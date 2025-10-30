@@ -277,9 +277,13 @@ def load_data(params, logger):
     else:
         raise NotImplementedError()
     # set reduced feature sizes
-    if params['data']['features_sub_length'] and \
+    if params['data'].get('features_sub_length') and \
        params['data']['features_sub_length'] < params['data']['num_features'][-1]:
         params['data']['num_features'][-1] = params['data']['features_sub_length']
+    if params['data'].get('features_sub_step') and 1 < params['data']['features_sub_step']:
+        params['data']['num_features'][-1] = (
+            params['data']['num_features'][-1] // params['data']['features_sub_step']
+        )
 
     # set targets sizes
     params['data']['num_targets'] = 0
