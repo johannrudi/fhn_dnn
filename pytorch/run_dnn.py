@@ -13,7 +13,7 @@ from dlkit.log.log_util import (
     logging_set_up,
     logging_get_logger
 )
-from dlkit.nets.util import print_parameters
+from dlkit.nets.util import get_parameters
 from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
@@ -45,13 +45,15 @@ from opt_utils import (
 
 ###############################################################################
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# ^TODO review usage of device variable
 
 def run(args, params):
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
     enable_debug = params['runconfig'].get('debug')
+
+    # check compute environment
+    cpu_logical_cores = os.cpu_count()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # set mode
     mode_name = params['runconfig']['mode']
@@ -78,6 +80,8 @@ def run(args, params):
     logger.info(f"Environment - Seed:            {params['data']['random_seed']}")
     logger.info(f"Environment - Mode:            {mode} (--mode {mode_name})")
     logger.info(f"Environment - Data key:        {mode_to_data_key}")
+    logger.info(f"Environment - CPU logical cores: {cpu_logical_cores}")
+    logger.info(f"Environment - Torch device:      {device}")
     # print parameters
     if enable_debug:
         print('<parameters>')
@@ -168,13 +172,16 @@ def run(args, params):
 
     # create network
     net = create_network(params, logging_get_logger('create_network'))
+
+    # log network and parameters
+    n_trainable_params, n_nontrainable_params, net_params_table = get_parameters(net)
+    net_out_path = os.path.join(self_dir, params['runconfig']['save_dir'], 'net.txt')
+    net_out = f"<network>\n{net}\n</network>\n"
+    net_out += f"<parameters>\n{net_params_table}\n</parameters>\n"
+    with open(net_out_path, "w") as f:
+        f.write(net_out)
     if enable_debug:
-        print('<network>')
-        print(net)
-        print('</network>')
-        print('<parameters>')
-        print_parameters(net)
-        print('</parameters>')
+        print(net_out)
 
     # load network weights
     if params['runconfig']['load_dir']:
@@ -266,7 +273,7 @@ def run(args, params):
 
     # compute predictions
     time_eval = timeit.default_timer()
-    eval_targets_pred, eval_targets_data = predict(net, eval_dataloader, params, features_transform_fn=features_transform_fn)
+    eval_targets_pred, eval_targets_data = predict(net, eval_dataloader, params, device, features_transform_fn=features_transform_fn)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess evaluation data
@@ -361,7 +368,7 @@ def run(args, params):
 
 ###############################################################################
 
-def predict(net, eval_dataloader, params, features_transform_fn=None):
+def predict(net, eval_dataloader, params, device, features_transform_fn=None):
     net.eval()
     # get network predictions
     data = dict()
