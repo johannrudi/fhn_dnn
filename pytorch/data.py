@@ -734,15 +734,25 @@ def create_dataloader(params, logger, mode,
         batch_size = batch_size,
     )
     if torch.cuda.is_available():
-        cpu_logical_cores = os.cpu_count()
-        n_workers = cpu_logical_cores // 4
+        n_workers = os.cpu_count() // 4
+        in_order = not shuffle
         dataloader_kwargs.update(dict(
             num_workers=n_workers,   # CPU subprocesses for data loading
             pin_memory=True,         # faster CPU->GPU transfer
             prefetch_factor=2,       # batches to prefetch per worker
             persistent_workers=True, # keep workers alive between epochs
             multiprocessing_context='fork',  # (or 'spawn' on Windows)
-            in_order=False,          # don't enforce first-in, first-out order
+            in_order=in_order,          # don't enforce first-in, first-out order
+        ))
+    else:  # otherwise CPU-only setup
+        n_workers = min(os.cpu_count(), 2)
+        in_order = not shuffle
+        dataloader_kwargs.update(dict(
+            num_workers=n_workers,
+            prefetch_factor=2,
+            persistent_workers=True,
+            multiprocessing_context='fork',
+            in_order=in_order,
         ))
 
     # create the dataloader
