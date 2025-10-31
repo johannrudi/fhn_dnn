@@ -735,7 +735,7 @@ def create_dataloader(params, logger, mode,
     )
     if torch.cuda.is_available():
         cpu_logical_cores = os.cpu_count()
-        n_workers = min(16, cpu_logical_cores)
+        n_workers = cpu_logical_cores // 4
         dataloader_kwargs.update(dict(
             num_workers=n_workers,   # CPU subprocesses for data loading
             pin_memory=True,         # faster CPU->GPU transfer
