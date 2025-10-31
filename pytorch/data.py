@@ -701,30 +701,49 @@ def create_dataloader(params, logger, mode,
         Ref: https://pytorch.org/docs/stable/data.html
     """
     if mode.any(Mode.TRAIN | Mode.PROFILE):
-        dataset_kwargs    = {'noise_idx_random': True}
-        dataloader_kwargs = {'shuffle': True, 'drop_last': False,
-                             'batch_size': params['data']['train_batch_size']}
+        shuffle = True
+        batch_size = params['data']['train_batch_size']
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
-        dataset_kwargs    = {'noise_idx_random': False}
-        dataloader_kwargs = {'shuffle': False, 'drop_last': False,
-                             'batch_size': params['data']['eval_batch_size']}
+        shuffle = False
+        batch_size = params['data']['eval_batch_size']
     else:
         raise NotImplementedError()
+
+    # set arguments for dataset
+    dataset_kwargs = dict(noise_idx_random=shuffle)
 
     # create the dataset
     logger.info('Create new dataset')
     dataset = FHN_Dataset(
-            features, targets,
-            features_noise = features_noise,
-            targets_noise  = targets_noise,
-            features_additive_noise_std = params['data'].get('features_additive_noise_std', 0.0),
-            features_transform_fn       = features_transform_fn,
-            features_sub_length         = params['data'].get('features_sub_length', 0),
-            features_sub_begin_random   = params['data'].get('features_sub_begin_random', False),
-            features_sub_step           = params['data'].get('features_sub_step'),
-            item_return_order           = item_return_order,
-            **dataset_kwargs
+        features, targets,
+        features_noise = features_noise,
+        targets_noise  = targets_noise,
+        features_additive_noise_std = params['data'].get('features_additive_noise_std', 0.0),
+        features_transform_fn       = features_transform_fn,
+        features_sub_length         = params['data'].get('features_sub_length', 0),
+        features_sub_begin_random   = params['data'].get('features_sub_begin_random', False),
+        features_sub_step           = params['data'].get('features_sub_step'),
+        item_return_order           = item_return_order,
+        **dataset_kwargs
     )
+
+    # set arguments for dataloader
+    dataloader_kwargs = dict(
+        shuffle = shuffle,
+        drop_last = False,
+        batch_size = batch_size,
+    )
+    if torch.cuda.is_available():
+        cpu_logical_cores = os.cpu_count()
+        n_workers = min(16, cpu_logical_cores)
+        dataloader_kwargs.update(dict(
+            num_workers=n_workers,   # CPU subprocesses for data loading
+            pin_memory=True,         # faster CPU->GPU transfer
+            prefetch_factor=2,       # batches to prefetch per worker
+            persistent_workers=True, # keep workers alive between epochs
+            multiprocessing_context='fork',  # (or 'spawn' on Windows)
+            in_order=False,          # don't enforce first-in, first-out order
+        ))
 
     # create the dataloader
     logger.info('Create new dataloader')
