@@ -18,7 +18,7 @@ from dlkit.opt.train import train_epochs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import (
-    ModeKeys,
+    Mode,
     load_parameters,
     save_parameters,
     update_parameters_from_args,
@@ -49,24 +49,35 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ^TODO review usage of device variable
 
 def run(args, params):
-    # get parameters
-    mode_name     = params['runconfig']['mode']
-    enable_debug  = params['runconfig']['debug']
-
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
-    mode     = ModeKeys.get_from_name(mode_name)
+    enable_debug = params['runconfig'].get('debug')
+
+    # set mode
+    mode_name = params['runconfig']['mode']
+    mode = None
+    for name in mode_name.split("_"):
+        m = Mode[name.upper()]
+        mode = m if mode is None else mode | m
+
+    # set key for data
+    if Mode.TRAIN in mode:
+        mode_to_data_key = 'train'
+    elif mode.any(Mode.PREDICT | Mode.EVAL):
+        mode_to_data_key = 'test'
+    else:
+        raise NotImplementedError()
 
     # set up logging
     logging_set_up( os.path.join(self_dir, params['runconfig']['save_dir'], 'run_dnn') )
     logger = logging_get_logger('run_dnn')
 
-    # print environment
+    # log environment
     logger.info(f"Environment - Directory:       {self_dir}")
     logger.info(f"Environment - PyTorch version: {torch.__version__}")
     logger.info(f"Environment - Seed:            {params['data']['random_seed']}")
-    logger.info(f"Environment - Mode name:       {mode_name}, key: {mode}")
-
+    logger.info(f"Environment - Mode:            {mode} (--mode {mode_name})")
+    logger.info(f"Environment - Data key:        {mode_to_data_key}")
     # print parameters
     if enable_debug:
         print('<parameters>')
@@ -104,7 +115,7 @@ def run(args, params):
                                              array_name='targets_noise')
 
 ####DEV
-    if params['data']['autoencoder_load_dir']:
+    if params['data'].get('autoencoder_load_dir'):
         import glob
         import yaml
 
@@ -140,14 +151,6 @@ def run(args, params):
 ####/DEV
 
     # create dataloader
-    if ModeKeys.TRAIN == mode:
-        mode_to_data_key = 'train'
-    elif ModeKeys.VALIDATE == mode:
-        mode_to_data_key = 'validate'
-    elif ModeKeys.EVAL == mode:
-        mode_to_data_key = 'test'
-    else:
-        raise NotImplementedError()
     dataloader = create_dataloader(
             params,
             logging_get_logger('create_dataloader'),
@@ -165,12 +168,13 @@ def run(args, params):
 
     # create network
     net = create_network(params, logging_get_logger('create_network'))
-    print('<network>')
-    print(net)
-    print('</network>')
-    print('<parameters>')
-    print_parameters(net)
-    print('</parameters>')
+    if enable_debug:
+        print('<network>')
+        print(net)
+        print('</network>')
+        print('<parameters>')
+        print_parameters(net)
+        print('</parameters>')
 
     # load network weights
     if params['runconfig']['load_dir']:
@@ -184,9 +188,7 @@ def run(args, params):
     # Training
     #
 
-    if ModeKeys.TRAIN == mode:
-        print('<train>')
-
+    if Mode.TRAIN in mode:
         # create optimizer
         optimizer = create_optimizer(net, params['optimizer'])
 
@@ -200,8 +202,31 @@ def run(args, params):
         checkpoint_dir    = os.path.join(self_dir, params['runconfig']['save_dir'], 'checkpoints')
         checkpoint_epochs = params['runconfig']['save_checkpoints_epochs']
 
-        # train network
-        epoch_dlog = train_epochs(
+        if Mode.PROFILE in mode:
+            # profile training
+            from dlkit.opt.profiler import profile_train_batches
+            from dlkit.opt.train import train_batches
+
+            train_batches_kwargs = dict(
+                device              = device,
+                inputs_transform_fn = features_transform_fn,
+            )
+            log_profile_dir = os.path.join(self_dir, params['runconfig']['save_dir'], 'profile')
+
+            prof = profile_train_batches(
+                train_batches,
+                train_batches_kwargs,
+                net,
+                dataloader,
+                optimizer,
+                loss_fn,
+                log_profile_dir=log_profile_dir,
+            )
+
+        else:
+            # train network
+            print(f"<train>")
+            train_dlog = train_epochs(
                 params['training']['epochs'],
                 net,
                 dataloader,
@@ -210,17 +235,18 @@ def run(args, params):
                 lr_scheduler        = lr_scheduler,
                 device              = device,
                 inputs_transform_fn = features_transform_fn,
-                logger              = logger,
                 checkpoint_epochs   = checkpoint_epochs,
-                checkpoint_dir      = checkpoint_dir
-        )
-        time_train = epoch_dlog['time_train']
-
-        print('</train>')
+                checkpoint_dir      = checkpoint_dir,
+            )
+            time_train = train_dlog.get('time_train')
+            print(f"</train>")
 
     #
     # Prediction
     #
+
+    if not mode.any(Mode.PREDICT | Mode.EVAL):
+        return
 
     print('<predict>')
 
@@ -230,7 +256,7 @@ def run(args, params):
         eval_dataloader[key] = create_dataloader(
                 params,
                 logging_get_logger('create_dataloader'),
-                ModeKeys.EVAL,
+                Mode.EVAL,
                 features          = features[key],
                 targets           = targets[key],
                 features_noise    = features_noise[key],
@@ -264,6 +290,9 @@ def run(args, params):
     #
     # Evaluation
     #
+
+    if Mode.EVAL not in mode:
+        return
 
     print('<evaluate>')
 
@@ -299,8 +328,8 @@ def run(args, params):
 
     # plot loss
     path = os.path.join(self_dir, params['runconfig']['save_dir'], 'loss')
-    plot_loss(epoch_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
-              loss_std=epoch_dlog['loss_std'], x_offset=1, y_scale='log')
+    plot_loss(train_dlog['loss_mean'], path, 'Training loss', params['training']['epochs'],
+              loss_std=train_dlog['loss_std'], x_offset=1, y_scale='log')
 
     # plot predictions
     for key in eval_targets_data.keys():
@@ -386,11 +415,13 @@ def create_arg_parser():
     parser.add_argument(
         "-m",
         "--mode",
-        choices=["train", "eval", "eval_all", "train_and_eval"],
-        default="train",
+        choices=["train", "predict", "eval", "train_eval", "train_predict", "train_profile"],
+        default="train_eval",
         help=(
-            "Can train, eval, eval_all, or train_and_eval."
-            + "  eval_all runs eval for all available checkpoints."
+            "Can train, predict, eval, and combine train_eval (default)."
+            + "  eval runs on available checkpoints."
+            + "  train_eval runs train, predict, and eval."
+            + "  train_profile runs profiling of a few training steps."
         ),
     )
     return parser

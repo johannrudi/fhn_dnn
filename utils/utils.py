@@ -4,18 +4,23 @@ Enumerators
 
 import enum
 
-class ModeKeys(enum.Enum):
+
+class Mode(enum.Flag):
     TRAIN    = enum.auto()
+    PROFILE  = enum.auto()
     VALIDATE = enum.auto()
     PREDICT  = enum.auto()
     EVAL     = enum.auto()
 
-    @staticmethod
-    def get_from_name(name):
-        for mode in ModeKeys:
-            if mode.name.casefold() == name.casefold():
+    @classmethod
+    def get_from_name(cls, name):
+        for mode in cls:
+            if mode.name == name.upper():
                 return mode
-        raise ValueError('Unknown name for mode: '+name)
+        raise ValueError(f"Unknown name for mode: {repr(name)}")
+
+    def any(self, modes):
+        return any(m in self for m in modes)
 
 
 class NetworkType(enum.Enum):
@@ -26,14 +31,16 @@ class NetworkType(enum.Enum):
     EFFICIENTNET   = enum.auto()
     TRANSFORMERNET = enum.auto()
 
-    @staticmethod
-    def get_from_name(name):
-        for mode in NetworkType:
-            if mode.name.casefold() == name.casefold():
-                return mode
-        raise ValueError('Unknown name for model type: '+name)
+    @classmethod
+    def get_from_name(cls, name):
+        for type in cls:
+            if type.name == name.upper():
+                return type
+        raise ValueError(f"Unknown name for model type: {repr(name)}")
+
 
 ###############################################################################
+
 
 """
 Runtime parameters

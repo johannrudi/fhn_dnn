@@ -6,7 +6,7 @@ import inspect, logging, pathlib, os, sys
 import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
-from utils import ModeKeys
+from utils import Mode
 
 ###############################################################################
 
@@ -700,11 +700,11 @@ def create_dataloader(params, logger, mode,
     """ Creates a PyTorch dataset and dataloader from numpy arrays.
         Ref: https://pytorch.org/docs/stable/data.html
     """
-    if mode == ModeKeys.TRAIN:
+    if mode.any(Mode.TRAIN | Mode.PROFILE):
         dataset_kwargs    = {'noise_idx_random': True}
         dataloader_kwargs = {'shuffle': True, 'drop_last': False,
                              'batch_size': params['data']['train_batch_size']}
-    elif mode in [ModeKeys.VALIDATE, ModeKeys.PREDICT, ModeKeys.EVAL]:
+    elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         dataset_kwargs    = {'noise_idx_random': False}
         dataloader_kwargs = {'shuffle': False, 'drop_last': False,
                              'batch_size': params['data']['eval_batch_size']}
