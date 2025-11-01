@@ -1,8 +1,8 @@
 description: "Options for DNN-based inverse maps"
 
 data:
-   #data_dir: '../data/2020-12-09'  # relative path to data directory (original data set from 2020)
-    data_dir: '../data/2025-04-11'  # relative path to data directory
+    # data_dir: '../data/2020-12-09'  # relative path to data directory (original data set from 2020)
+    data_dir: '../../fhn_data/2025-04-11'
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_use_channels_range:
         - 0
@@ -10,6 +10,7 @@ data:
     features_normalize: False       # scale features to have zero mean and unit std
     features_sub_length: 1000       # use sub interval of this size
     features_sub_begin_random: True # flag to pick a sub interval at random
+    # features_sub_step: 4            # subsample by this step size
     features_additive_noise_std: 0  # add i.i.d. noise
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     targets_normalize: False        # scale targets to have zero mean and unit std
@@ -20,8 +21,9 @@ data:
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
-    autoencoder_load_dir: #'runs/ae_dir'
-    autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
+    # use encoder network of an autoencoder
+    # autoencoder_load_dir: 'runs/ae'
+    # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
 
 net:
 #   type: 'MLPNet'
@@ -68,6 +70,35 @@ net:
         - 128
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
+#   type: 'ConvResNet'
+#   conv_layer_sizes:
+#       - 4
+#       - 4
+#       - 4
+#       - 4
+#   residual_blocks_sizes:
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#       -
+#           - 32
+#           - 32
+#           - 128
+#           - 32
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
 #   type: 'EfficientNet'
 #   dropout: 0.2
 
@@ -100,7 +131,6 @@ training:
     epochs: 400
 
 runconfig:
-    mode: 'TRAIN'
     load_dir: #'runs/dnn'
     save_dir:  'runs/dnn'
     log_epochs: 1
