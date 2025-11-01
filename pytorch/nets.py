@@ -41,8 +41,8 @@ def _get_activation(name):
     else:
         raise ValueError('Unknown name for activation function: '+name)
 
-def _get_conv1d_length(in_length, kernel_size, stride=1, padding=0, dilation=1):
-    return int( (in_length + 2*padding - dilation*(kernel_size - 1) - 1) / stride + 1 )
+def _get_conv1d_size(in_length, kernel, stride=1, padding=0, dilation=1):
+    return int( (in_length + 2*padding - dilation*(kernel- 1) - 1) / stride + 1 )
 
 def _create_MLPNet(input_channels, input_size, output_size, net_params, logger):
     return MLPNet_MultIn(
@@ -86,60 +86,68 @@ def _create_MLPResNet(input_channels, input_size, output_size, net_params, logge
 
 def _create_convNet(input_channels, input_size, output_size, net_params, logger):
     activation_fn = _get_activation(net_params['activation_fn'])
-    hidden_conv_layers_kernels = len(net_params['conv_layer_sizes'])*[3]
-    hidden_conv_layers_kwargs = {'stride': 2, 'padding': 0}
+    use_dropout = net_params.get('dropout', False)
+    kernel = net_params.get("conv_layer_kernel", 3)
+    stride = net_params.get("conv_layer_stride", 2)
+    padding = net_params.get("conv_layer_padding", 0)
+    n_conv_layers = len(net_params['conv_layer_sizes'])
+    # set parameters of convolution layers
+    hidden_conv_layers_kernels = n_conv_layers * [kernel]
+    hidden_conv_layers_kwargs = {'stride': stride, 'padding': padding}
     # calculate length of features after convolutional layers
-    n_features = input_size
-    for kernel_size in hidden_conv_layers_kernels:
-        n_features = _get_conv1d_length(n_features, kernel_size,
-                                        stride=hidden_conv_layers_kwargs['stride'],
-                                        padding=hidden_conv_layers_kwargs['padding'])
     n_channels = input_channels * net_params['conv_layer_sizes'][-1]
+    n_features = input_size
+    for _ in range(n_conv_layers):
+        n_features = _get_conv1d_size(n_features, kernel, stride, padding)
     flattened_input_size = n_channels * n_features
     # create net
     return ConvNet(
-            # convolutional layers
-            input_channels,
-            hidden_conv_layers_channels_mult = net_params['conv_layer_sizes'],
-            hidden_conv_layers_kernels       = hidden_conv_layers_kernels,
-            hidden_conv_layers_activation    = activation_fn,
-            hidden_conv_layers_kwargs        = hidden_conv_layers_kwargs,
-            # dense layers
-            hidden_dense_input_size          = flattened_input_size,
-            hidden_dense_layers_sizes        = net_params['dense_layer_sizes'],
-            hidden_dense_layers_activation   = activation_fn,
-            # output layer
-            output_size                      = output_size,
-            output_layer_activation          = None,
-            # other
-            use_dropout                      = net_params.get('dropout', False)
+        # convolutional layers
+        input_channels,
+        hidden_conv_layers_channels_mult = net_params['conv_layer_sizes'],
+        hidden_conv_layers_kernels       = hidden_conv_layers_kernels,
+        hidden_conv_layers_activation    = activation_fn,
+        hidden_conv_layers_kwargs        = hidden_conv_layers_kwargs,
+        # dense layers
+        hidden_dense_input_size          = flattened_input_size,
+        hidden_dense_layers_sizes        = net_params['dense_layer_sizes'],
+        hidden_dense_layers_activation   = activation_fn,
+        # output layer
+        output_size                      = output_size,
+        output_layer_activation          = None,
+        # other
+        use_dropout                      = use_dropout,
     )
 
 def _create_convResNet(input_channels, input_size, output_size, net_params, logger,
                        mlp_block_hidden_input_size=0):
     activation_fn = _get_activation(net_params['activation_fn'])
     use_dropout = net_params.get('dropout', False)
+    kernel = net_params.get("conv_layer_kernel", 3)
+    stride = net_params.get("conv_layer_stride", 2)
+    padding = net_params.get("conv_layer_padding", 1)
+    padding_mode = net_params.get("conv_layer_padding_mode", "replicate")
+    n_conv_layers = len(net_params['conv_layer_sizes'])
     # set parameters of convolution block
     conv_resnet_params = {
         "channels_mult": net_params['conv_layer_sizes'],
-        "kernels": len(net_params['conv_layer_sizes'])*[3],
+        "kernels": n_conv_layers * [kernel],
         "activation": activation_fn,
         "use_dropout": use_dropout,
         "mlb_kwargs": {
-            'padding': 1,
-            'padding_mode': 'replicate',
-            'stride': 2
+            'stride': stride,
+            'padding': padding,
+            'padding_mode': padding_mode,
         },
     }
     # calculate length of features after convolutional layers
-    n_features = input_size
-    for kernel_size in conv_resnet_params['kernels']:
-        n_features = _get_conv1d_length(n_features, kernel_size,
-                                        stride=conv_resnet_params['mlb_kwargs']['stride'],
-                                        padding=conv_resnet_params['mlb_kwargs']['padding'])
     n_channels = input_channels * net_params['conv_layer_sizes'][-1]
-    flattened_input_size = (n_channels * n_features,
-                            net_params['residual_blocks_sizes'][0][0])
+    n_features = input_size
+    for _ in range(n_conv_layers):
+        n_features = _get_conv1d_size(n_features, kernel, stride, padding)
+    flattened_input_size = (
+        n_channels * n_features, net_params['residual_blocks_sizes'][0][0]
+    )
     # configure hidden inputs to residual blocks
     if mlp_block_hidden_input_size:
         residual_blocks_sizes = list(net_params['residual_blocks_sizes'])
