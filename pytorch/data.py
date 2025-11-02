@@ -664,9 +664,6 @@ class FHN_Dataset(Dataset):
         # apply additive i.i.d. noise
         if self.features_additive_noise_std:
             features_transformed += self.features_additive_noise_std * torch.randn(features_transformed.size())
-        # transform features
-        if self.features_transform_fn is not None:
-            features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
         # truncate features array
         if self.features_sub_length and \
            self.features_sub_length < features.size(-1):
@@ -681,6 +678,9 @@ class FHN_Dataset(Dataset):
         if self.features_sub_step and 1 < self.features_sub_step:
             features             = features            [...,::self.features_sub_step]
             features_transformed = features_transformed[...,::self.features_sub_step]
+        # transform features
+        if self.features_transform_fn is not None:
+            features_transformed = self.features_transform_fn(features_transformed[None,...])[0]
         # get target sample
         if self.targets is not None:
             targets = self.targets[idx]

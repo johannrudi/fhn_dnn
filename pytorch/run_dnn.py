@@ -118,6 +118,26 @@ def run(args, params):
                                              logging_get_logger('preprocess_targets_noise'),
                                              array_name='targets_noise')
 
+    # set transform functions
+    features_transform_fn = None  # used in dataloader
+    train_input_transform_fn = None  # used in training loops
+
+    if params['data'].get('features_fft'):
+        def features_transform_fn(features):
+            # subsample features
+            features_half = features[...,::2]
+            size = features_half.size()
+
+            # compute FFT (use rfft for real-valued input)
+            features_fft = torch.fft.rfft(features, dim=-1, norm="ortho")
+            features_fft = features_fft[...,:size[-1]]
+
+            # concatenate features and FFT real and imag parts
+            features_transformed = torch.concatenate(
+                (features_half, features_fft.real, features_fft.imag), axis=1
+            )
+            return features_transformed
+
 ####DEV
     if params['data'].get('autoencoder_load_dir'):
         import glob
@@ -149,21 +169,20 @@ def run(args, params):
         print(autoencoder)
         print('</autoencoder>')
 
-        features_transform_fn = autoencoder.e_net
-    else:
-        features_transform_fn = None
+        train_input_transform_fn = autoencoder.e_net
 ####/DEV
 
     # create dataloader
     dataloader = create_dataloader(
-            params,
-            logging_get_logger('create_dataloader'),
-            mode,
-            features          = features[mode_to_data_key],
-            targets           = targets[mode_to_data_key],
-            features_noise    = features_noise[mode_to_data_key],
-            targets_noise     = targets_noise[mode_to_data_key],
-            item_return_order = 'yx'
+        params,
+        logging_get_logger('create_dataloader'),
+        mode,
+        features=features[mode_to_data_key],
+        targets=targets[mode_to_data_key],
+        features_noise=features_noise[mode_to_data_key],
+        targets_noise=targets_noise[mode_to_data_key],
+        features_transform_fn=features_transform_fn,
+        item_return_order='yx',
     )
 
     #
@@ -216,7 +235,7 @@ def run(args, params):
 
             train_batches_kwargs = dict(
                 device              = device,
-                inputs_transform_fn = features_transform_fn,
+                inputs_transform_fn = train_input_transform_fn,
             )
             log_profile_dir = os.path.join(self_dir, params['runconfig']['save_dir'], 'profile')
 
@@ -241,7 +260,7 @@ def run(args, params):
                 loss_fn,
                 lr_scheduler        = lr_scheduler,
                 device              = device,
-                inputs_transform_fn = features_transform_fn,
+                inputs_transform_fn = train_input_transform_fn,
                 checkpoint_epochs   = checkpoint_epochs,
                 checkpoint_dir      = checkpoint_dir,
             )
@@ -261,19 +280,21 @@ def run(args, params):
     eval_dataloader = dict()
     for key in features.keys():
         eval_dataloader[key] = create_dataloader(
-                params,
-                logging_get_logger('create_dataloader'),
-                Mode.EVAL,
-                features          = features[key],
-                targets           = targets[key],
-                features_noise    = features_noise[key],
-                targets_noise     = targets_noise[key],
-                item_return_order = 'yx'
+            params,
+            logging_get_logger('create_dataloader'),
+            Mode.EVAL,
+            features=features[key],
+            targets=targets[key],
+            features_noise=features_noise[key],
+            targets_noise=targets_noise[key],
+            features_transform_fn=features_transform_fn,
+            item_return_order='yx',
         )
 
     # compute predictions
     time_eval = timeit.default_timer()
-    eval_targets_pred, eval_targets_data = predict(net, eval_dataloader, params, device, features_transform_fn=features_transform_fn)
+    eval_targets_pred, eval_targets_data = predict(net, eval_dataloader, params, device,
+                                                   input_transform_fn=train_input_transform_fn)
     time_eval = timeit.default_timer() - time_eval
 
     # postprocess evaluation data
@@ -368,7 +389,7 @@ def run(args, params):
 
 ###############################################################################
 
-def predict(net, eval_dataloader, params, device, features_transform_fn=None):
+def predict(net, eval_dataloader, params, device, input_transform_fn=None):
     net.eval()
     # get network predictions
     data = dict()
@@ -379,8 +400,8 @@ def predict(net, eval_dataloader, params, device, features_transform_fn=None):
             p_list = list()
             for x, yd in tqdm(eval_dataloader[key], desc=key):
                 x = x.to(device)
-                if features_transform_fn is not None:
-                    x = features_transform_fn(x)
+                if input_transform_fn is not None:
+                    x = input_transform_fn(x)
                 yp = net(x)
                 d_list.append(yd.cpu().numpy())
                 p_list.append(yp.cpu().numpy())
