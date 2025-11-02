@@ -368,9 +368,12 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
 #/DEV
     # calculate scaling for normalization
     if scale is None:
+        shape = features['train'].ndim * [1]
+        shape[1] = features['train'].shape[1]
+        dtype = features['train'].dtype
         scale = {
-            'shift': 0.0,
-            'mult':  1.0
+            'shift': np.zeros(shape, dtype=dtype),
+            'mult':  np.ones(shape, dtype=dtype),
         }
         if params['data'].get('features_normalize', False):
             if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
@@ -396,8 +399,13 @@ def preprocess_features(features, params, logger, scale=None, array_name='featur
 #/DEV
             else:
                 raise NotImplementedError(f"Unknown {features_type=}")
-    # apply scaling
     logger.info(f"{array_name} scale = {scale}")
+    if 3 < features['train'].ndim:
+        logger.warning(
+            f"Scaling of features is currently only tested for ndim=3,"
+            + f" got ndim={features['train'].ndim}"
+        )
+    # apply scaling
     features = _apply_scale(features, scale)
     # replace nan values
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'NOISE'.casefold()]:
@@ -431,20 +439,27 @@ def preprocess_targets(targets, params, logger, scale=None, array_name='targets'
         return None
     # calculate scaling for normalization
     if scale is None:
+        shape = (1, *targets['train'].shape[1:])
+        dtype = targets['train'].dtype
         scale = {
-            'shift': 0.0,
-            'mult':  1.0
+            'shift': np.zeros(shape, dtype=dtype),
+            'mult':  np.ones(shape, dtype=dtype),
         }
         if params['data'].get('targets_normalize', False):
-            assert 2 == targets['train'].ndim
+            assert 1 < targets['train'].ndim
             scale = {
                 'shift': np.mean(targets['train'], axis=0, keepdims=True),
-                'mult' : np.std (targets['train'], axis=0, keepdims=True)
+                'mult' : np.std (targets['train'], axis=0, keepdims=True),
             }
-    # apply scaling
     logger.info(f"{array_name} scale = {scale}")
+    if 2 < targets['train'].ndim:
+        logger.warning(
+            f"Scaling of targets is currently only tested for ndim=2,"
+            + f" got ndim={targets['train'].ndim}"
+        )
+    # apply scaling
     targets = _apply_scale(targets, scale)
-    # return scale
+    # output scale
     return scale
 
 def postprocess_targets(targets, scale):
