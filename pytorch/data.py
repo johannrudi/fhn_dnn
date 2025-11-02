@@ -72,11 +72,11 @@ def _load_and_split_arrays(data_params, logger=None):
                 'targets_noise_test' : 'ar1_Ntest2000_param.npy'
             }
     )
-    features_use_channels_range = data_params.get('features_use_channels_range', None)
-    features_use_length_range   = data_params.get('features_use_length_range', None)
-    Ntrain    = data_params.get('Ntrain')
+    features_use_channels_range = data_params.get('features_use_channels_range')
+    features_use_length_range   = data_params.get('features_use_length_range')
+    Ntrain    = data_params['Ntrain']
     Nvalidate = data_params.get('Nvalidate')
-    Ntest     = data_params.get('Ntest', None)
+    Ntest     = data_params.get('Ntest')
 
     # load arrays
     if '2020' in data_dir.name:
@@ -268,31 +268,33 @@ def load_data(params, logger):
             logger.info(f"targets_noise['{key}']: \tshape {targets_noise[key].shape}, dtype {targets_noise[key].dtype}")
 
     # set feature sizes
-    if dictarray_is_not_none(features):
-        params['data']['num_features'] = list(features['train'].shape[1:])
-        params['data'].setdefault('Ntest', features['test'].shape[0])
-    elif dictarray_is_not_none(features_noise):
-        params['data']['num_features'] = list(features_noise['train'].shape[1:])
-        params['data'].setdefault('Ntest', features_noise['test'].shape[0])
-    else:
-        raise NotImplementedError()
-    # set reduced feature sizes
-    if params['data'].get('features_sub_length') and \
-       params['data']['features_sub_length'] < params['data']['num_features'][-1]:
-        params['data']['num_features'][-1] = params['data']['features_sub_length']
-    if params['data'].get('features_sub_step') and 1 < params['data']['features_sub_step']:
-        params['data']['num_features'][-1] = (
-            params['data']['num_features'][-1] // params['data']['features_sub_step']
-        )
+    if "num_features" not in params["data"]:
+        if dictarray_is_not_none(features):
+            params['data']['num_features'] = list(features['train'].shape[1:])
+            params['data'].setdefault('Ntest', features['test'].shape[0])
+        elif dictarray_is_not_none(features_noise):
+            params['data']['num_features'] = list(features_noise['train'].shape[1:])
+            params['data'].setdefault('Ntest', features_noise['test'].shape[0])
+        else:
+            raise NotImplementedError()
+        # set reduced feature sizes
+        if params['data'].get('features_sub_length') and \
+           params['data']['features_sub_length'] < params['data']['num_features'][-1]:
+            params['data']['num_features'][-1] = params['data']['features_sub_length']
+        if params['data'].get('features_sub_step') and 1 < params['data']['features_sub_step']:
+            params['data']['num_features'][-1] = (
+                params['data']['num_features'][-1] // params['data']['features_sub_step']
+            )
 
     # set targets sizes
-    params['data']['num_targets'] = 0
-    if dictarray_is_not_none(targets):
-        assert dictarray_is_not_none(features)
-        params['data']['num_targets'] += targets['train'].shape[1]
-    if dictarray_is_not_none(targets_noise):
-        assert dictarray_is_not_none(features_noise)
-        params['data']['num_targets'] += targets_noise['train'].shape[1]
+    if "num_targets" not in params["data"]:
+        params['data']['num_targets'] = 0
+        if dictarray_is_not_none(targets):
+            assert dictarray_is_not_none(features)
+            params['data']['num_targets'] += targets['train'].shape[1]
+        if dictarray_is_not_none(targets_noise):
+            assert dictarray_is_not_none(features_noise)
+            params['data']['num_targets'] += targets_noise['train'].shape[1]
 
     # print sample sizes
     logger.info(f"Ntrain:    {data_params['Ntrain']}")

@@ -75,7 +75,7 @@ def _create_MLPResNet(input_channels, input_size, output_size, net_params, logge
             flattened_input_size,
             output_size,
             embedding_size                   = embed_size,
-            attention_blocks_n_heads         = net_params.get('attention_layers_n_heads', None),
+            attention_blocks_n_heads         = net_params.get('attention_layers_n_heads'),
             attention_blocks_activation_size = embed_size * 4,
             attention_blocks_activation      = activation_fn,
             residual_blocks_sizes            = net_params['residual_blocks_sizes'],
@@ -215,13 +215,8 @@ def create_network(params, logger):
     net_type   = NetworkType.get_from_name(net_params['type'])
     logger.info(f"Network type: {net_params['type']}, key: {net_type}")
     # set input and output sizes
-    if params['data'].get('autoencoder_load_dir', None):
-        input_channels = 1
-        input_size     = params['data']['autoencoder_latent_size']
-    else:
-        assert 2 == len(params['data']['num_features'])
-        input_channels = params['data']['num_features'][0]
-        input_size     = params['data']['num_features'][1]
+    assert 2 == len(params['data']['num_features'])
+    input_channels, input_size = params['data']['num_features']
     output_size = params['data']['num_targets']
     # create network
     if NetworkType.MLPNET == net_type:
@@ -441,13 +436,8 @@ def create_gan(params, logger):
     g_net_params = params['g_net']
     d_net_params = params['d_net']
     # set input and output sizes
-    if params['data'].get('autoencoder_load_dir', None):
-        input_channels = 1
-        input_size     = params['data']['autoencoder_latent_size']
-    else:
-        assert 2 == len(params['data']['num_features'])
-        input_channels = params['data']['num_features'][0]
-        input_size     = params['data']['num_features'][1]
+    assert 2 == len(params['data']['num_features'])
+    input_channels, input_size = params['data']['num_features']
     output_size = params['data']['num_targets']
     latent_size = params['data']['latent_size']
     # create generator & discriminator networks
