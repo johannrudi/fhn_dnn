@@ -12,6 +12,8 @@ data:
     features_sub_begin_random: True # flag to pick a sub interval at random
     # features_sub_step: 4            # subsample by this step size
     features_additive_noise_std: 0  # add i.i.d. noise
+    # features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
+    # num_features: [3, 500]
     targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
     targets_normalize: False        # scale targets to have zero mean and unit std
     Ntrain:    1024
@@ -24,6 +26,7 @@ data:
     # use encoder network of an autoencoder
     # autoencoder_load_dir: 'runs/ae'
     # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
+    # num_features: [1, 16]  # adjust to AE latent size
 
 net:
 #   type: 'MLPNet'
@@ -59,6 +62,7 @@ net:
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
     type: 'ConvNet'
+    conv_layer_kernel: 3
     conv_layer_sizes:
         - 8
         - 16
@@ -71,27 +75,14 @@ net:
     activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
 #   type: 'ConvResNet'
+#   conv_layer_kernel: 3
+#   conv_layer_padding: 1
 #   conv_layer_sizes:
-#       - 4
-#       - 4
-#       - 4
-#       - 4
+#       - 8
+#       - 8
+#       - 8
+#       - 8
 #   residual_blocks_sizes:
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
 #       -
 #           - 32
 #           - 32
@@ -122,10 +113,10 @@ optimizer:
     epsilon: 1.0e-8
     weight_decay: 0.01  # used in AdamW
     learning_rate_scheduler:
-        init_learning_rate: 1.0e-3
-        linear_epochs:   50  # num epochs to get from `init_learning_rate` to `learning_rate`
-        constant_epochs: 50  # num epochs to stay at `learning_rate`
-        final_learning_rate: 1.0e-4
+        init_learning_rate:  #1.0e-3
+        linear_epochs:       #50  # num epochs to get from `init_learning_rate` to `learning_rate`
+        constant_epochs:     #50  # num epochs to stay at `learning_rate`
+        final_learning_rate: #1.0e-4
 
 training:
     epochs: 400
