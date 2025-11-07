@@ -1,8 +1,7 @@
 description: "Options for DNN-based inverse maps"
 
 data:
-    # data_dir: '../data/2020-12-09'  # relative path to data directory (original data set from 2020)
-    data_dir: '../../fhn_data/2025-04-11'
+    data_dir: '../data/2020-12-09'  # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_use_channels_range:
         - 0
@@ -112,7 +111,7 @@ optimizer:
     beta2: 0.999
     epsilon: 1.0e-8
     weight_decay: 0.01  # used in AdamW
-    learning_rate_scheduler:
+    learning_rate_scheduler: # commented values below means to use defaults
         init_learning_rate:  #1.0e-3
         linear_epochs:       #50  # num epochs to get from `init_learning_rate` to `learning_rate`
         constant_epochs:     #50  # num epochs to stay at `learning_rate`
