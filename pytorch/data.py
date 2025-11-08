@@ -38,15 +38,21 @@ def _load_memmap(data_file, cols_num, dtype=np.float32):
         shape=(data_rows, data_points)
     )
 
-def _load_array(data_file, cols_num=None, dtype=np.float32):
+def _load_array(data_file, cols_num=None, dtype=np.float32, expand_dims_axis=None):
+    # load numpy file
     try:
         # load assuming a regular numpy array
-        return np.load(data_file)
+        array = np.load(data_file)
     except ValueError:
         # instead, load using memmap
         assert cols_num is not None
         assert dtype is not None
-        return _load_memmap(data_file, cols_num=cols_num, dtype=dtype)
+        array = _load_memmap(data_file, cols_num=cols_num, dtype=dtype)
+    assert 2 <= array.ndim
+    # ensure a channel dimension exists
+    if expand_dims_axis is not None and array.ndim < 3:
+        array = np.expand_dims(array, axis=expand_dims_axis)
+    return array
 
 def _load_and_split_arrays(data_params, logger=None):
     # set up logger
@@ -73,7 +79,11 @@ def _load_and_split_arrays(data_params, logger=None):
             }
     )
     features_use_channels_range = data_params.get('features_use_channels_range')
-    features_use_length_range   = data_params.get('features_use_length_range')
+    features_use_length_range = data_params.get('features_use_length_range')
+    features_cols_num = data_params.get('features_cols_num')  # for memmap
+    targets_cols_num = data_params.get('targets_cols_num')  # for memmap
+    features_noise_cols_num = data_params.get('features_noise_cols_num')  # for memmap
+    targets_noise_cols_num = data_params.get('targets_noise_cols_num')  # for memmap
     Ntrain    = data_params['Ntrain']
     Nvalidate = data_params.get('Nvalidate')
     Ntest     = data_params.get('Ntest')
@@ -132,35 +142,43 @@ def _load_and_split_arrays(data_params, logger=None):
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
-    elif '2025' in data_dir.name:
+    else:
         # load features
         if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_ = _load_array(data_dir/file_names['features'])
-            features_test = _load_array(data_dir/file_names['features_test'])
-            # DEV data of AlonsoMarder model
-            # features_ = _load_array(file_names['features'], cols_num=600000)[:,None,:] # TODO change the data dimensions, instead of this hack
-            # features_test = _load_array(file_names['features_test'], cols_num=600000)[:,None,:] # TODO change the data dimensions, instead of this hack
-            # /DEV
+            features_ = _load_array(
+                data_dir/file_names['features'],
+                cols_num=features_cols_num,
+                expand_dims_axis=1,
+            )
+            features_test = _load_array(
+                data_dir/file_names['features_test'],
+                cols_num=features_cols_num,
+                expand_dims_axis=1,
+            )
             if features_use_channels_range is not None:
                 assert 2 == len(features_use_channels_range), len(features_use_channels_range)
                 start, stop = features_use_channels_range
-                features_     = features_[:,start:stop,:]
+                features_ = features_[:,start:stop,:]
                 features_test = features_test[:,start:stop,:]
             if features_use_length_range is not None:
                 assert 2 == len(features_use_length_range), len(features_use_length_range)
                 start, stop = features_use_length_range
-                features_     = features_[:,:,start:stop]
+                features_ = features_[:,:,start:stop]
                 features_test = features_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_test.shape[0]
             logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
         elif features_type in ['ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
-            features_     = np.expand_dims( _load_array(data_dir/file_names['features_stats']), axis=1 )
-            features_test = np.expand_dims( _load_array(data_dir/file_names['features_stats_test']), axis=1 )
-            # DEV data of AlonsoMarder model
-            # features_ = _load_array(file_names['features_stats'], cols_num=2)[:,None,:] # TODO change the data dimensions, instead of this hack
-            # features_test = _load_array(file_names['features_stats_test'], cols_num=2)[:,None,:] # TODO change the data dimensions, instead of this hack
-            # /DEV
+            features_ = _load_array(
+                data_dir/file_names['features_stats'],
+                cols_num=features_cols_num,
+                expand_dims_axis=1,
+            )
+            features_test = _load_array(
+                data_dir/file_names['features_stats_test'],
+                cols_num=features_cols_num,
+                expand_dims_axis=1,
+            )
             if Ntest is None:
                 Ntest = features_test.shape[0]
             logger.debug(f"{features_type=}, {features_.shape=}, {features_test.shape=}")
@@ -170,12 +188,14 @@ def _load_and_split_arrays(data_params, logger=None):
             raise ValueError(f"Unknown {features_type=}")
         # load targets
         if targets_type in ['ODE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets_     = _load_array(data_dir/file_names['targets'])
-            targets_test = _load_array(data_dir/file_names['targets_test'])
-            # DEV data of AlonsoMarder model
-            # targets_ = _load_array(file_names['targets'], cols_num=9) # TODO change the data dimensions, instead of this hack
-            # targets_test = _load_array(file_names['targets_test'], cols_num=9) # TODO change the data dimensions, instead of this hack
-            # /DEV
+            targets_ = _load_array(
+                data_dir/file_names['targets'],
+                cols_num=targets_cols_num,
+            )
+            targets_test = _load_array(
+                data_dir/file_names['targets_test'],
+                cols_num=targets_cols_num,
+            )
             logger.debug(f"{targets_type=}, {targets_.shape=}, {targets_test.shape=}")
         elif targets_type in ['NOISE'.casefold(), 'N/A'.casefold()]:
             pass
@@ -183,17 +203,25 @@ def _load_and_split_arrays(data_params, logger=None):
             raise ValueError(f"Unknown {targets_type=}")
         # load features of noise
         if features_type in ['NOISE'.casefold(), 'TIME_NOISE'.casefold()]:
-            features_noise_     = np.load(data_dir/file_names['features_noise'])
-            features_noise_test = np.load(data_dir/file_names['features_noise_test'])
+            features_noise_ = _load_array(
+                data_dir/file_names['features_noise'],
+                cols_num=features_noise_cols_num,
+                expand_dims_axis=1,
+            )
+            features_noise_test = _load_array(
+                data_dir/file_names['features_noise_test'],
+                cols_num=features_noise_cols_num,
+                expand_dims_axis=1,
+            )
             if features_use_channels_range is not None:
                 assert 2 == len(features_use_channels_range), len(features_use_channels_range)
                 start, stop = features_use_channels_range
-                features_noise_     = features_noise_[:,start:stop,:]
+                features_noise_ = features_noise_[:,start:stop,:]
                 features_noise_test = features_noise_test[:,start:stop,:]
             if features_use_length_range is not None:
                 assert 2 == len(features_use_length_range), len(features_use_length_range)
                 start, stop = features_use_length_range
-                features_noise_     = features_noise_[:,:,start:stop]
+                features_noise_ = features_noise_[:,:,start:stop]
                 features_noise_test = features_noise_test[:,:,start:stop]
             if Ntest is None:
                 Ntest = features_noise_test.shape[0]
@@ -204,15 +232,19 @@ def _load_and_split_arrays(data_params, logger=None):
             raise ValueError(f"Unknown {features_type=}")
         # load targets of noise
         if targets_type in ['NOISE'.casefold(), 'ODE_NOISE'.casefold()]:
-            targets_noise_     = np.load(data_dir/file_names['targets_noise'])
-            targets_noise_test = np.load(data_dir/file_names['targets_noise_test'])
+            targets_noise_ = _load_array(
+                data_dir/file_names['targets_noise'],
+                cols_num=targets_noise_cols_num,
+            )
+            targets_noise_test = _load_array(
+                data_dir/file_names['targets_noise_test'],
+                cols_num=targets_noise_cols_num,
+            )
             logger.debug(f"{targets_type=}, {targets_noise_.shape=}, {targets_noise_test.shape=}")
         elif targets_type in ['ODE'.casefold(), 'N/A'.casefold()]:
             pass
         else:
             raise ValueError(f"Unknown {targets_type=}")
-    else:
-        raise NotImplementedError(f"Unsupported data directory: {data_dir}")
 
     # split arrays
     if features_type in ['TIME'.casefold(), 'TIME_NOISE'.casefold(), 'ODE_STATS'.casefold(), 'RATE_DURATION'.casefold()]:
