@@ -48,9 +48,9 @@ def run(args, params):
         mode = m if mode is None else mode | m
 
     # set key for data
-    if Mode.TRAIN in mode:
+    if mode is not None and Mode.TRAIN in mode:
         mode_to_data_key = "train"
-    elif mode.any(Mode.PREDICT | Mode.EVAL):
+    elif mode is not None and mode.any(Mode.PREDICT | Mode.EVAL):
         mode_to_data_key = "test"
     else:
         raise NotImplementedError()
