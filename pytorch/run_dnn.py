@@ -102,7 +102,7 @@ def run(args, params):
     targets_scale = preprocess_targets(
         targets, params, logging_get_logger("preprocess_targets")
     )
-    features_noise_scale = preprocess_features(
+    preprocess_features(
         features_noise,
         params,
         logging_get_logger("preprocess_features_noise"),
@@ -197,7 +197,7 @@ def run(args, params):
     net = create_network(params, logging_get_logger("create_network"))
 
     # log network and parameters
-    n_trainable_params, n_nontrainable_params, net_params_table = get_parameters(net)
+    _, _, net_params_table = get_parameters(net)
     net_out_path = os.path.join(self_dir, params["runconfig"]["save_dir"], "net.txt")
     net_out = f"<network>\n{net}\n</network>\n"
     net_out += f"<parameters>\n{net_params_table}\n</parameters>\n"
@@ -249,7 +249,7 @@ def run(args, params):
                 self_dir, params["runconfig"]["save_dir"], "profile"
             )
 
-            prof = profile_train_batches(
+            profile_train_batches(
                 train_batches,
                 train_batches_kwargs,
                 net,
