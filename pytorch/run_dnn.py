@@ -4,6 +4,7 @@ Run training and evaluation of DNN-based inverse map.
 
 import argparse
 import os
+import pathlib
 import pprint
 import random
 import sys
@@ -18,15 +19,16 @@ from dlk.nets.util import get_parameters
 from dlk.opt.train import train_epochs
 from tqdm import tqdm
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../utils"))
+sys.path.append(str(pathlib.Path(__file__).parent.parent))
+
 from nets import create_ae, create_network
 from opt_utils import create_lr_scheduler, create_optimizer
 
 from data import (create_dataloader, dictarray_is_not_none, load_data,
                   postprocess_targets, preprocess_features, preprocess_targets)
-from utils import (Mode, load_parameters, plot_data_vs_predict,
-                   plot_data_vs_predict_error, plot_loss, save_parameters,
-                   update_parameters_from_args)
+from utils.utils import (Mode, load_parameters, plot_data_vs_predict,
+                         plot_data_vs_predict_error, plot_loss, save_parameters,
+                         update_parameters_from_args)
 
 ###############################################################################
 
@@ -81,10 +83,6 @@ def run(args, params):
         torch.manual_seed(params["data"]["random_seed"])
     else:
         params["data"]["random_seed"] = None
-
-    # initialize timers
-    time_train = 0.0
-    time_eval = 0.0
 
     #
     # Data
@@ -186,7 +184,6 @@ def run(args, params):
         features_noise=features_noise[mode_to_data_key],
         targets_noise=targets_noise[mode_to_data_key],
         features_transform_fn=features_transform_fn,
-        item_return_order="yx",
     )
 
     #
@@ -298,7 +295,6 @@ def run(args, params):
             features_noise=features_noise[key],
             targets_noise=targets_noise[key],
             features_transform_fn=features_transform_fn,
-            item_return_order="yx",
         )
 
     # compute predictions

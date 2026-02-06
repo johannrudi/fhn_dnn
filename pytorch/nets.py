@@ -14,7 +14,7 @@ from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 from dlk.nets.unet import EncoderNet1d_2021 as EncoderConvNet
 from dlk.nets.unet import UNet1d_2021 as UNet
 
-from utils import NetworkType
+from utils.utils import NetworkType
 
 # --------------------------------------
 # Neural Networks for Inverse Maps

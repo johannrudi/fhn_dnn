@@ -6,12 +6,10 @@ import inspect
 import logging
 import os  # TODO: remove dependency, use pathlib instead
 import pathlib
-import sys
 
 import numpy as np
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../utils"))
-from utils import Mode
+from utils.utils import Mode
 
 ###############################################################################
 
