@@ -1,0 +1,29 @@
+[project]
+name =  "fhn_dnn"
+description = "Solving inverse problems with neural networks for the the FitzHugh-Nagumo system."
+readme = "README.md"
+authors = [
+    { name = "Johann Rudi", email = "jrudi@vt.edu" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "pyyaml",
+    "scikit-learn",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+torch = [
+    "torch>=2.0.0",
+    "deep-learning-toolkit",
+]
+tensorflow = [
+    "tensorflow",
+]
+develop = [
+    "black>=25",
+    "pytest>=8",
+]

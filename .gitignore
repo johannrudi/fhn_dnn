@@ -1,3 +1,4 @@
+pyrightconfig.json
 # output files
 pytorch/runs/*
 tensorflow/runs/*
