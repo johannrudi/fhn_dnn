@@ -27,6 +27,9 @@ data:
     # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
     # num_features: [1, 16]  # adjust to AE latent size
 
+dataloader:
+    item_return_order: "yx"
+
 net:
 #   type: 'MLPNet'
 #   dense_layer_sizes:
@@ -38,26 +41,10 @@ net:
 
 #   type: 'MLPResNet'
 #   residual_blocks_sizes:
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
     type: 'ConvNet'
@@ -82,11 +69,10 @@ net:
 #       - 8
 #       - 8
 #   residual_blocks_sizes:
-#       -
-#           - 32
-#           - 32
-#           - 128
-#           - 32
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
 #   type: 'EfficientNet'

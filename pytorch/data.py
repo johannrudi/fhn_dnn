@@ -769,7 +769,9 @@ class FHN_Dataset(Dataset):
             self.features = None
         if targets is not None:
             self.targets = torch.from_numpy(targets)
-            assert self.targets.size(0) == self.features.size(0)
+            assert self.features is None or self.targets.size(0) == self.features.size(
+                0
+            )
         else:
             self.targets = None
         if features_noise is not None:
@@ -792,8 +794,10 @@ class FHN_Dataset(Dataset):
     def __len__(self):
         if self.features is not None:
             return self.features.size(0)
-        else:
+        elif self.features_noise is not None:
             return self.features_noise.size(0)
+        else:
+            raise NotImplementedError()
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
@@ -817,10 +821,11 @@ class FHN_Dataset(Dataset):
             features = None
             features_transformed = None
         # apply additive i.i.d. noise
-        if self.features_additive_noise_std:
+        if features_transformed is not None and self.features_additive_noise_std:
             features_transformed += self.features_additive_noise_std * torch.randn(
                 features_transformed.size()
             )
+        # TODO: fix linter warnings:
         # truncate features array
         if self.features_sub_length and self.features_sub_length < features.size(-1):
             if self.features_sub_begin_random:
@@ -837,7 +842,7 @@ class FHN_Dataset(Dataset):
             features = features[..., :: self.features_sub_step]
             features_transformed = features_transformed[..., :: self.features_sub_step]
         # transform features
-        if self.features_transform_fn is not None:
+        if features_transformed is not None and self.features_transform_fn is not None:
             features_transformed = self.features_transform_fn(
                 features_transformed[None, ...]
             )[0]
@@ -878,7 +883,6 @@ def create_dataloader(
     features_noise,
     targets_noise,
     features_transform_fn=None,
-    item_return_order="yx",
 ):
     """Creates a PyTorch dataset and dataloader from numpy arrays.
     Ref: https://pytorch.org/docs/stable/data.html
@@ -911,40 +915,43 @@ def create_dataloader(
             "features_sub_begin_random", False
         ),
         features_sub_step=params["data"].get("features_sub_step"),
-        item_return_order=item_return_order,
+        item_return_order=params["dataloader"]["item_return_order"],
         **dataset_kwargs,
     )
 
     # set arguments for dataloader
-    dataloader_kwargs = dict(
-        shuffle=shuffle,
-        drop_last=False,
-        batch_size=batch_size,
-    )
+    dataloader_kwargs = {
+        "shuffle": shuffle,
+        "drop_last": False,
+        "batch_size": batch_size,
+    }
+    cpu_logical_cores = os.cpu_count()
     if torch.cuda.is_available():
-        n_workers = os.cpu_count() // 4
-        in_order = not shuffle
+        if cpu_logical_cores is not None:
+            n_workers = cpu_logical_cores // 4
+        else:
+            n_workers = 8
         dataloader_kwargs.update(
-            dict(
-                num_workers=n_workers,  # CPU subprocesses for data loading
-                pin_memory=True,  # faster CPU->GPU transfer
-                prefetch_factor=2,  # batches to prefetch per worker
-                persistent_workers=True,  # keep workers alive between epochs
-                multiprocessing_context="fork",  # (or 'spawn' on Windows)
-                in_order=in_order,  # don't enforce first-in, first-out order
-            )
+            {
+                "num_workers": n_workers,  # CPU subprocesses for data loading
+                "pin_memory": True,  # faster CPU->GPU transfer
+                "prefetch_factor": 2,  # batches to prefetch per worker
+                "persistent_workers": True,  # keep workers alive between epochs
+                "multiprocessing_context": "fork",  # (or 'spawn' on Windows)
+            }
         )
     else:  # otherwise CPU-only setup
-        n_workers = min(os.cpu_count(), 2)
-        in_order = not shuffle
+        if cpu_logical_cores is not None:
+            n_workers = min(cpu_logical_cores, 2)
+        else:
+            n_workers = 2
         dataloader_kwargs.update(
-            dict(
-                num_workers=n_workers,
-                prefetch_factor=2,
-                persistent_workers=True,
-                multiprocessing_context="fork",
-                in_order=in_order,
-            )
+            {
+                "num_workers": n_workers,
+                "prefetch_factor": 2,
+                "persistent_workers": True,
+                "multiprocessing_context": "fork",
+            }
         )
 
     # create the dataloader
