@@ -1,0 +1,509 @@
+"""
+Run training and evaluation of autoencoder.
+"""
+
+import argparse
+import os
+import pprint
+import random
+import sys
+import timeit
+
+import matplotlib.pyplot as plt
+import numpy as np
+import sklearn.metrics as metrics
+import torch
+from dlk.log.log_util import logging_get_logger, logging_set_up
+from dlk.opt.scheduler import create_learning_rate_scheduler
+from dlk.opt.train import train_epochs
+from tqdm import tqdm
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "../utils"))
+from nets import create_ae
+
+from data import (create_dataloader, dictarray_is_not_none, load_data, load_timesteps,
+                  postprocess_features, preprocess_features)
+from utils import (ModeKeys, load_parameters, plot_data_vs_predict,
+                   plot_data_vs_predict_error, plot_loss, save_parameters,
+                   update_parameters_from_args)
+
+###############################################################################
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ^TODO review usage of device variable
+
+
+def run(args, params):
+    # get parameters
+    mode_name = params["runconfig"]["mode"]
+    enable_debug = params["runconfig"]["debug"]
+
+    # set environment
+    self_dir = os.path.dirname(os.path.abspath(__file__))
+    mode = ModeKeys.get_from_name(mode_name)
+
+    # set up logging
+    logging_set_up(os.path.join(self_dir, params["runconfig"]["save_dir"], "run_ae"))
+    logger = logging_get_logger("run_ae")
+
+    # print environment
+    logger.info(f"Environment - Directory:       {self_dir}")
+    logger.info(f"Environment - PyTorch version: {torch.__version__}")
+    logger.info(f"Environment - Seed:            {params['data']['random_seed']}")
+    logger.info(f"Environment - Mode name:       {mode_name}, key: {mode}")
+
+    # print parameters
+    if enable_debug:
+        print("<parameters>")
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(params)
+        print("</parameters>")
+
+    # fix random seed for reproducibility
+    if "random_seed" in params["data"] and params["data"]["random_seed"] is not None:
+        random.seed(params["data"]["random_seed"])
+        np.random.seed(params["data"]["random_seed"])
+        torch.manual_seed(params["data"]["random_seed"])
+    else:
+        params["data"]["random_seed"] = None
+
+    # initialize timers
+    time_train = 0.0
+    time_eval = 0.0
+
+    #
+    # Data
+    #
+
+    # load data
+    features, _, features_noise, _ = load_data(params, logging_get_logger("load_data"))
+
+    # preprocess data
+    features_scale = preprocess_features(
+        features, params, logging_get_logger("preprocess_features")
+    )
+    features_noise_scale = preprocess_features(
+        features_noise,
+        params,
+        logging_get_logger("preprocess_features_noise"),
+        scale=features_scale,
+        array_name="features_noise",
+    )
+
+    # create dataloader
+    if ModeKeys.TRAIN == mode:
+        mode_to_data_key = "train"
+    elif ModeKeys.VALIDATE == mode:
+        mode_to_data_key = "validate"
+    elif ModeKeys.EVAL == mode:
+        mode_to_data_key = "test"
+    else:
+        raise NotImplementedError()
+    dataloader = create_dataloader(
+        params,
+        logging_get_logger("create_dataloader"),
+        mode,
+        features=features[mode_to_data_key],
+        targets=None,
+        features_noise=features_noise[mode_to_data_key],
+        targets_noise=None,
+        item_return_order="yy",
+    )
+
+    #
+    # Network
+    #
+
+    # create network
+    net = create_ae(params, logging_get_logger("create_network"))
+    print("<network>")
+    print(net)
+    print("</network>")
+
+    # load network weights
+    if params["runconfig"]["load_dir"]:
+        import glob
+
+        checkpoint_folders = glob.glob(
+            os.path.join(self_dir, params["runconfig"]["load_dir"], "checkpoints", "*")
+        )
+        latest_folder = max(checkpoint_folders, key=os.path.getmtime)
+        checkpoint_files = glob.glob(os.path.join(latest_folder, "*.pt"))
+        requested_checkpoint = max(checkpoint_files, key=os.path.getmtime)
+
+        logger.info(f"Load network: use checkpoint file: {requested_checkpoint}")
+
+        checkpoint = torch.load(requested_checkpoint, map_location=device)
+        net.load_state_dict(checkpoint["model_state_dict"])
+
+    # transfer to device
+    net.to(device)
+
+    #
+    # Training
+    #
+
+    if ModeKeys.TRAIN == mode:
+        print("<train>")
+
+        # create optimizer
+        if "Adam".casefold() == params["optimizer"]["type"].casefold():
+            optimizer = torch.optim.Adam(
+                net.parameters(),
+                lr=params["optimizer"]["learning_rate"],
+                betas=(params["optimizer"]["beta1"], params["optimizer"]["beta2"]),
+                eps=params["optimizer"]["epsilon"],
+            )
+        elif "AdamW".casefold() == params["optimizer"]["type"].casefold():
+            optimizer = torch.optim.AdamW(
+                net.parameters(),
+                lr=params["optimizer"]["learning_rate"],
+                betas=(params["optimizer"]["beta1"], params["optimizer"]["beta2"]),
+                eps=params["optimizer"]["epsilon"],
+                weight_decay=params["optimizer"]["weight_decay"],
+            )
+        else:
+            raise ValueError(
+                "Unknown name for optimizer: " + params["optimizer"]["type"]
+            )
+
+        # create learning rate scheduler
+        if (
+            "learning_rate_scheduler" in params["optimizer"]
+            and params["optimizer"]["learning_rate_scheduler"] is not None
+        ):
+            params_lr_scheduler = params["optimizer"]["learning_rate_scheduler"]
+            lr_scheduler = create_learning_rate_scheduler(
+                optimizer,
+                params["training"]["epochs"],
+                params["optimizer"]["learning_rate"],
+                linear_epochs=params_lr_scheduler["linear_epochs"],
+                constant_epochs=params_lr_scheduler["constant_epochs"],
+                init_learning_rate=params_lr_scheduler["init_learning_rate"],
+                final_learning_rate=params_lr_scheduler["final_learning_rate"],
+            )
+        else:
+            lr_scheduler = None
+
+        # set loss function
+        loss_fn = torch.nn.MSELoss()
+
+        # checkpointing for saving network weights
+        checkpoint_dir = os.path.join(
+            self_dir, params["runconfig"]["save_dir"], "checkpoints"
+        )
+        checkpoint_epochs = params["runconfig"]["save_checkpoints_epochs"]
+
+        # train network
+        epoch_dlog = train_epochs(
+            params["training"]["epochs"],
+            net,
+            dataloader,
+            optimizer,
+            loss_fn,
+            lr_scheduler=lr_scheduler,
+            device=device,
+            inputs_transform_fn=None,
+            logger=logger,
+            checkpoint_epochs=checkpoint_epochs,
+            checkpoint_dir=checkpoint_dir,
+        )
+        time_train = epoch_dlog["time_train"]
+
+        print("</train>")
+
+    #
+    # Prediction
+    #
+
+    print("<predict>")
+
+    # create dataloaders
+    eval_dataloader = dict()
+    for key in features.keys():
+        eval_dataloader[key] = create_dataloader(
+            params,
+            logging_get_logger("create_dataloader"),
+            ModeKeys.EVAL,
+            features=features[key],
+            targets=None,
+            features_noise=features_noise[key],
+            targets_noise=None,
+            item_return_order="yy",
+        )
+
+    # compute predictions
+    time_eval = timeit.default_timer()
+    eval_features_pred, eval_features_data, eval_latent_pred = predict(
+        net, eval_dataloader, params
+    )
+    time_eval = timeit.default_timer() - time_eval
+
+    # postprocess evaluation data
+    if dictarray_is_not_none(features):
+        postprocess_features(eval_features_data, features_scale, params)
+        postprocess_features(eval_features_pred, features_scale, params)
+    elif dictarray_is_not_none(features_noise):
+        postprocess_features(eval_features_data, features_noise_scale, params)
+        postprocess_features(eval_features_pred, features_noise_scale, params)
+    else:
+        raise NotImplementedError()
+
+    # save predictions to file
+    if params["predict"]["save_subdir"]:
+        path = os.path.join(
+            self_dir, params["runconfig"]["save_dir"], params["predict"]["save_subdir"]
+        )
+        os.mkdir(path)
+        for key in eval_features_pred.keys():
+            np.save(
+                os.path.join(path, f"features_predict_{key}.npy"),
+                eval_features_pred[key],
+            )
+            np.save(
+                os.path.join(path, f"latent_predict_{key}.npy"), eval_latent_pred[key]
+            )
+
+    print("</predict>")
+
+    #
+    # Evaluation
+    #
+
+    print("<evaluate>")
+
+    # compute percentiles
+    percentiles = [0.10, 0.25, 0.50, 0.75, 0.90]
+    eval_features_data_percentiles, eval_features_pred_percentiles, _ = (
+        get_mse_percentiles(eval_features_data, eval_features_pred, percentiles)
+    )
+
+    # compute evaluation metrics
+    eval_mse, eval_mae, eval_mape, eval_medae, eval_r2 = eval_data_vs_pred(
+        eval_features_data, eval_features_pred
+    )
+    for key in eval_features_data.keys():
+        logger.info(f"Evaluate - {key} - MSE:      {eval_mse[key]}")
+        logger.info(f"Evaluate - {key} - MAE:      {eval_mae[key]}")
+        logger.info(f"Evaluate - {key} - MedAE:    {eval_medae[key]}")
+        logger.info(f"Evaluate - {key} - MAPE:     {eval_mape[key]}")
+        logger.info(f"Evaluate - {key} - R2 score: {eval_r2[key]}")
+
+    print("</evaluate>")
+
+    #
+    # Output
+    #
+
+    # print runtimes
+    logger.info(f"Runtime - train [sec]: {time_train}")
+    logger.info(f"Runtime - eval [sec]:  {time_eval}")
+    if 0 < time_train:
+        n_epoch = params["training"]["epochs"]
+        n_steps = params["training"]["epochs"] * (
+            params["data"]["Ntrain"] // params["data"]["train_batch_size"]
+        )
+        n_samples = params["data"]["train_batch_size"]
+        logger.info(f"Runtime statistics - train - #epochs:          {n_epoch}")
+        logger.info(f"Runtime statistics - train - #steps:           {n_steps}")
+        logger.info(
+            f"Runtime statistics - train - #samples (total): {n_steps*n_samples}"
+        )
+        logger.info(
+            f"Runtime statistics - train - avg. steps/sec:   {n_steps/time_train}"
+        )
+        logger.info(
+            f"Runtime statistics - train - avg. samples/sec: {n_steps*n_samples/time_train}"
+        )
+    if 0 < time_eval:
+        n_samples = (
+            params["data"]["Ntest"] // params["data"]["eval_batch_size"]
+        ) * params["data"]["eval_batch_size"]
+        logger.info(f"Runtime statistics - eval  - #samples:         {n_samples}")
+        logger.info(
+            f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}"
+        )
+
+    # plot loss
+    if ModeKeys.TRAIN == mode:
+        path = os.path.join(self_dir, params["runconfig"]["save_dir"], "loss")
+        plot_loss(
+            epoch_dlog["loss_mean"],
+            path,
+            "Training loss",
+            params["training"]["epochs"],
+            loss_std=epoch_dlog["loss_std"],
+            x_offset=1,
+            y_scale="log",
+        )
+
+    # plot predictions percentiles
+    for key in eval_features_data.keys():
+        # skip if no samples exist
+        if params["data"]["N" + key] <= 0:
+            continue
+        # set up plotting
+        m = len(percentiles)
+        fig, ax = plt.subplots(m, 1, figsize=(10, 2 * m))
+        y_lim = [
+            min(
+                np.min(eval_features_data_percentiles[key]),
+                np.min(eval_features_pred_percentiles[key]),
+            ),
+            max(
+                np.max(eval_features_data_percentiles[key]),
+                np.max(eval_features_pred_percentiles[key]),
+            ),
+        ]
+        # plot true values vs. predictions
+        for i in range(m):
+            y_data = eval_features_data_percentiles[key][i]
+            y_pred = eval_features_pred_percentiles[key][i]
+            y_mse = np.mean((y_pred - y_data) ** 2)
+            ax[i].plot(
+                y_data,
+                label=f"data ({key})",
+                color="tab:orange",
+                linewidth=0,
+                marker=".",
+                markersize=6,
+            )
+            ax[i].plot(y_pred, label=f"MSE={y_mse:.3e}", color="tab:blue", linewidth=2)
+            ax[i].set_ylim(y_lim)
+            ax[i].set_ylabel(f"{int(percentiles[i]*100):d}%")
+            ax[i].legend(loc="center left", bbox_to_anchor=(1, 0.5), fancybox=True)
+            ax[i].grid()
+        ax[-1].set_xlabel("time step")
+        fig.tight_layout()
+        path = os.path.join(
+            self_dir, params["runconfig"]["save_dir"], "predict_mse_percentiles_" + key
+        )
+        fig.savefig(f"{path}.pdf", dpi=300)
+
+    # show plots
+    if params["runconfig"]["show_plots"]:
+        plt.show()
+
+
+###############################################################################
+
+
+def predict(net, eval_dataloader, params):
+    net.eval()
+    # get network predictions
+    data = dict()
+    pred = dict()
+    latent = dict()
+    with torch.no_grad():
+        for key in eval_dataloader.keys():
+            d_list = list()
+            p_list = list()
+            l_list = list()
+            for x, yd in eval_dataloader[key]:
+                x = x.to(device)
+                zp = net.encode(x)
+                yp = net.decode(zp)
+                d_list.append(yd.cpu().numpy())
+                p_list.append(yp.cpu().numpy())
+                l_list.append(zp.cpu().numpy())
+            data[key] = np.concatenate(d_list, axis=0) if d_list else np.array([])
+            pred[key] = np.concatenate(p_list, axis=0) if p_list else np.array([])
+            latent[key] = np.concatenate(l_list, axis=0) if l_list else np.array([])
+    # return predictions and (true) data
+    return pred, data, latent
+
+
+def eval_data_vs_pred(data, pred):
+    eval_mse = dict()
+    eval_mae = dict()
+    eval_mape = dict()
+    eval_medae = dict()
+    eval_r2 = dict()
+    for key in data.keys():
+        if 0 == len(data[key]) and 0 == len(pred[key]):
+            eval_mse[key] = np.nan
+            eval_mae[key] = np.nan
+            eval_mape[key] = np.nan
+            eval_medae[key] = np.nan
+            eval_r2[key] = np.nan
+            continue
+        data_ = data[key].squeeze()
+        pred_ = pred[key].squeeze()
+        eval_mse[key] = metrics.mean_squared_error(data_, pred_)
+        eval_mae[key] = metrics.mean_absolute_error(data_, pred_)
+        eval_mape[key] = metrics.mean_absolute_percentage_error(data_, pred_)
+        eval_medae[key] = metrics.median_absolute_error(data_, pred_)
+        eval_r2[key] = metrics.r2_score(data_, pred_)
+    return eval_mse, eval_mae, eval_mape, eval_medae, eval_r2
+
+
+def get_mse_percentiles(features_data, features_pred, percentiles):
+    features_percentiles = dict()
+    features_predict_percentiles = dict()
+    for key in features_data.keys():
+        assert key in features_pred
+        if 0 == len(features_data[key]) and 0 == len(features_pred[key]):
+            features_percentiles[key] = np.array([])
+            features_predict_percentiles[key] = np.array([])
+            continue
+        features_shape = features_data[key].shape
+        # calculate MSE
+        y_data = features_data[key].squeeze()
+        y_pred = features_pred[key].squeeze()
+        y_mse = np.mean((y_pred - y_data) ** 2, axis=1)
+        # sort MSE
+        idx_sorted = np.argsort(y_mse)
+        # get percentiles
+        features_percentiles[key] = np.empty([len(percentiles), features_shape[-1]])
+        features_predict_percentiles[key] = np.empty_like(features_percentiles[key])
+        for j, p in enumerate(percentiles):
+            i = int(np.round(p * features_shape[0]))
+            features_percentiles[key][j] = features_data[key][idx_sorted[i]]
+            features_predict_percentiles[key][j] = features_pred[key][idx_sorted[i]]
+    # return percentiles
+    return features_percentiles, features_predict_percentiles, idx_sorted
+
+
+###############################################################################
+
+
+def create_arg_parser():
+    """
+    Create parser for command line args.
+
+    :returns: ArgumentParser
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-p",
+        "--params",
+        default="./configs/params_ae.yaml",
+        help="Path to .yaml file with parameters",
+    )
+    parser.add_argument(
+        "-m",
+        "--mode",
+        choices=["train", "eval", "eval_all", "train_and_eval"],
+        default="train",
+        help=(
+            "Can train, eval, eval_all, or train_and_eval."
+            + "  eval_all runs eval for all available checkpoints."
+        ),
+    )
+    return parser
+
+
+def main():
+    # get arguments
+    parser = create_arg_parser()
+    args = parser.parse_args(sys.argv[1:])
+    # load parameters, and save them for reproducibility
+    params = load_parameters(args.params)
+    update_parameters_from_args(params["runconfig"], args)
+    save_parameters(params, save_dir=params["runconfig"]["save_dir"])
+    # run script
+    run(args, params)
+
+
+if __name__ == "__main__":
+    main()

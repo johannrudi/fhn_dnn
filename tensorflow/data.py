@@ -129,7 +129,7 @@ def postprocess_labels(labels_train_predict, labels_test_predict, scale):
 def create_dataset(params, mode,
                    features_train, features_validate, features_test,
                    labels_train,   labels_validate,   labels_test,
-                   repeat=False, prefetch=False):
+                   repeat=False, prefetch=False, drop_last=True):
     """ Creates a tensorflow dataset from numpy arrays.
         Ref: https://www.tensorflow.org/api_docs/python/tf/data/Dataset
     """
@@ -158,10 +158,10 @@ def create_dataset(params, mode,
     # batch the dataset
     if enable_training:
         if enable_verbose:  print('[create_dataset]', 'Batch the dataset, batch size', params['data']['train_batch_size'])
-        dataset = dataset.batch(params['data']['train_batch_size'], drop_remainder=True)
+        dataset = dataset.batch(params['data']['train_batch_size'], drop_remainder=drop_last)
     else:
         if enable_verbose:  print('[create_dataset]', 'Batch the dataset, batch size', params['data']['eval_batch_size'])
-        dataset = dataset.batch(params['data']['eval_batch_size'], drop_remainder=True)
+        dataset = dataset.batch(params['data']['eval_batch_size'], drop_remainder=drop_last)
 
     # activate prefetching
     if prefetch:

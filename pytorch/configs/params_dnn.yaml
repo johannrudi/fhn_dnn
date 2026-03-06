@@ -1,0 +1,115 @@
+description: "Options for DNN-based inverse maps"
+
+data:
+    data_dir: '../data/2020-12-09'  # relative path to data directory
+    features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
+    features_use_channels_range:
+        - 0
+        - 1
+    features_normalize: False       # scale features to have zero mean and unit std
+    features_sub_length: 1000       # use sub interval of this size
+    features_sub_begin_random: True # flag to pick a sub interval at random
+    # features_sub_step: 4            # subsample by this step size
+    features_additive_noise_std: 0  # add i.i.d. noise
+    # features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
+    # num_features: [3, 500]
+    targets_type: 'ODE'             # 'ODE', 'ODE_NOISE', 'NOISE'
+    targets_normalize: False        # scale targets to have zero mean and unit std
+    Ntrain:    1024
+    Nvalidate: 1000
+    Ntest:     2000
+    train_shuffle_buffer_size: 1000
+    train_batch_size: 256
+    eval_batch_size:  256
+    random_seed: 123
+    # use encoder network of an autoencoder
+    # autoencoder_load_dir: 'runs/ae'
+    # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
+    # num_features: [1, 16]  # adjust to AE latent size
+
+dataloader:
+    item_return_order: "yx"
+
+net:
+#   type: 'MLPNet'
+#   dense_layer_sizes:
+#       - 128
+#       - 128
+#       - 128
+#       - 128
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
+#   type: 'MLPResNet'
+#   residual_blocks_sizes:
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
+    type: 'ConvNet'
+    conv_layer_kernel: 3
+    conv_layer_sizes:
+        - 8
+        - 16
+        - 32
+    dense_layer_sizes:
+        - 128
+        - 128
+        - 128
+        - 128
+    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
+#   type: 'ConvResNet'
+#   conv_layer_kernel: 3
+#   conv_layer_padding: 1
+#   conv_layer_sizes:
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#   residual_blocks_sizes:
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#       - [32, 32, 128, 32]
+#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+
+#   type: 'EfficientNet'
+#   dropout: 0.2
+
+#   type: 'TransformerNet'
+#   embedding_size: 128
+#   attention_layers_n_heads:
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#       - 8
+#   patch_size: 50
+#   dropout: 0.0
+
+optimizer:
+    type: 'AdamW'  # 'Adam', 'AdamW'
+    learning_rate: 1.0e-2
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1.0e-8
+    weight_decay: 0.01  # used in AdamW
+    learning_rate_scheduler: # commented values below means to use defaults
+        init_learning_rate:  #1.0e-3
+        linear_epochs:       #50  # num epochs to get from `init_learning_rate` to `learning_rate`
+        constant_epochs:     #50  # num epochs to stay at `learning_rate`
+        final_learning_rate: #1.0e-4
+
+training:
+    epochs: 400
+
+runconfig:
+    load_dir: #'runs/dnn'
+    save_dir:  'runs/dnn'
+    log_epochs: 1
+    save_checkpoints_epochs: 50
+    debug: True
+    show_plots: False

@@ -1,0 +1,2 @@
+- add noise to spike rate and duration
+- add fourier transform to data loader

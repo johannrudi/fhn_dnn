@@ -1,0 +1,2 @@
+# ignore newer data sets because of size
+202[1-9]*

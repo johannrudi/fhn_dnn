@@ -1,0 +1,163 @@
+description: "Options for Autoencoder"
+
+data:
+    data_dir: '../data/2025-04-11'  # relative path to data directory
+    features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
+    features_sub_length: 1024       # use sub interval of this size
+    features_sub_begin_random: False # flag to pick a sub interval at random
+    features_additive_noise_std: 0  # add i.i.d. noise
+    Ntrain:    1024
+    Nvalidate: 1000
+    Ntest:     2000
+    train_shuffle_buffer_size: 1000
+    train_batch_size: 256
+    eval_batch_size:  256
+    random_seed: 123
+    # latent space of encoder output / decoder input [ONLY FOR MLP NET]
+    latent_size: 16  # e.g., 4, 8, 16, 32, 64
+
+e_net:
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+    conv_internal_channels: 32
+    conv_channel_mult:
+      - 1  # latent dim = size(features) / 2
+      - 2  # latent dim = size(features) / 4
+      - 4  # latent dim = size(features) / 8
+      - 8  # latent dim = size(features) / 16
+      - 8  # latent dim = size(features) / 32
+      - 8  # latent dim = size(features) / 64
+#     - 8  # latent dim = size(features) / 128
+#     - 8  # latent dim = size(features) / 256
+#     - 8  # latent dim = size(features) / 512
+      - 1
+
+    dense_layer_sizes:
+        - 500
+        - 500
+        - 250
+        - 250
+        - 125
+        - 125
+        - 64
+        - 64
+        - 32
+        - 32
+        - 16
+        - 16
+
+    residual_blocks_sizes:
+        -
+            - 256
+            - 256
+            - 1024
+            - 256
+        -
+            - 256
+            - 64
+            - 256
+            - 64
+        -
+            - 64
+            - 16
+            - 64
+            - 16
+#       -
+#           - 16
+#           - 4
+#           - 16
+#           - 4
+    attention_layers_n_heads:
+      - 8
+      - 4
+      - 2
+#     - 0
+
+d_net:
+    type: 'MLPResNet'  # 'MLPNet', 'MLPResNet', 'ConvNet'
+    activation_fn: 'gelu'  # 'relu', 'gelu', 'swish'
+    dropout: #0.2
+
+    conv_internal_channels: 32
+    conv_channel_mult:
+      - 1
+#     - 8  # latent dim = size(features) / 512
+#     - 8  # latent dim = size(features) / 256
+#     - 8  # latent dim = size(features) / 128
+      - 8  # latent dim = size(features) / 64
+      - 8  # latent dim = size(features) / 32
+      - 8  # latent dim = size(features) / 16
+      - 4  # latent dim = size(features) / 8
+      - 2  # latent dim = size(features) / 4
+      - 1  # latent dim = size(features) / 2
+
+    dense_layer_sizes:
+        - 16
+        - 16
+        - 32
+        - 32
+        - 64
+        - 64
+        - 125
+        - 125
+        - 250
+        - 250
+        - 500
+        - 500
+
+    residual_blocks_sizes:
+#       -
+#           - 4
+#           - 4
+#           - 16
+#           - 16
+        -
+            - 16
+            - 16
+            - 64
+            - 64
+        -
+            - 64
+            - 64
+            - 256
+            - 256
+        -
+            - 256
+            - 256
+            - 1024
+            - 256
+    attention_layers_n_heads:
+#     - 0
+      - 2
+      - 4
+      - 8
+
+optimizer:
+    type: 'AdamW'  # 'Adam', 'AdamW'
+    learning_rate: 1.0e-2
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1.0e-8
+    weight_decay: 0.01  # used in AdamW
+    learning_rate_scheduler:
+        init_learning_rate: 1.0e-3
+        linear_epochs:   50  # num epochs to get from `init_learning_rate` to `learning_rate`
+        constant_epochs: 50  # num epochs to stay at `learning_rate`
+        final_learning_rate: 1.0e-4
+
+training:
+    epochs: 400
+
+predict:
+    save_subdir: 'predict'
+
+runconfig:
+    mode: 'TRAIN'
+    load_dir: #'runs/ae'
+    save_dir:  'runs/ae'
+    log_epochs: 1                # TODO move to [training] in all configs
+    save_checkpoints_epochs: 50  # TODO move to [training] in all configs
+    debug: True
+    show_plots: False
