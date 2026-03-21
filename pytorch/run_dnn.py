@@ -4,6 +4,7 @@ Run training and evaluation of DNN-based inverse map.
 
 import argparse
 import os
+import pathlib
 import pprint
 import random
 import sys
@@ -30,8 +31,11 @@ from data import (create_dataloader, dictarray_is_not_none, load_data,
 
 
 def run(params):
+    # <init>
+
     # set environment
-    self_dir = os.path.dirname(os.path.abspath(__file__))
+    self_dir = pathlib.Path(__file__).parent
+    self_name = pathlib.Path(__file__).stem
     enable_debug = params["runconfig"].get("debug")
 
     # check compute environment
@@ -52,17 +56,18 @@ def run(params):
         raise NotImplementedError()
 
     # set up logging
-    logging_set_up(os.path.join(self_dir, params["runconfig"]["save_dir"], "run_dnn"))
-    logger = logging_get_logger("run_dnn")
+    logging_set_up(self_dir / params["runconfig"]["save_dir"] / self_name)
+    logger = logging_get_logger(self_name)
 
     # log environment
     logger.info(f"Environment - Directory:         {self_dir}")
     logger.info(f"Environment - PyTorch version:   {torch.__version__}")
-    logger.info(f"Environment - Seed:              {params['data']['random_seed']}")
-    logger.info(f"Environment - Mode:              {mode} (--mode {mode_name})")
-    logger.info(f"Environment - Data key:          {mode_to_data_key}")
     logger.info(f"Environment - CPU logical cores: {cpu_logical_cores}")
     logger.info(f"Environment - Torch device:      {device}")
+    logger.info(f"Environment - Seed:              {params['data'].get('random_seed')}")
+    logger.info(f"Environment - Mode:              {mode} (--mode {mode_name})")
+    logger.info(f"Environment - Data key:          {mode_to_data_key}")
+
     # print parameters
     if enable_debug:
         print("<parameters>")
@@ -71,16 +76,17 @@ def run(params):
         print("</parameters>")
 
     # fix random seed for reproducibility
-    if "random_seed" in params["data"] and params["data"]["random_seed"] is not None:
-        random.seed(params["data"]["random_seed"])
-        np.random.seed(params["data"]["random_seed"])
-        torch.manual_seed(params["data"]["random_seed"])
+    random_seed = params["data"].get("random_seed")
+    if random_seed is not None:
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
     else:
         params["data"]["random_seed"] = None
 
-    #
-    # Data
-    #
+    # </init>
+
+    # <data>
 
     # load data
     features, targets, features_noise, targets_noise = load_data(
@@ -135,8 +141,8 @@ def run(params):
 
         import yaml
 
-        requested_param_file = os.path.join(
-            params["data"]["autoencoder_load_dir"], "params.yaml"
+        requested_param_file = (
+            pathlib.Path(params["data"]["autoencoder_load_dir"]) / "params.yaml"
         )
 
         checkpoint_folders = glob.glob(
@@ -180,16 +186,16 @@ def run(params):
         features_transform_fn=features_transform_fn,
     )
 
-    #
-    # Network
-    #
+    # </data>
+
+    # <network>
 
     # create network
     net = create_network(params, logging_get_logger("create_network"))
 
     # log network and parameters
     _, _, net_params_table = get_parameters(net)
-    net_out_path = os.path.join(self_dir, params["runconfig"]["save_dir"], "net.txt")
+    net_out_path = self_dir / params["runconfig"]["save_dir"] / "net.txt"
     net_out = f"<network>\n{net}\n</network>\n"
     net_out += f"<parameters>\n{net_params_table}\n</parameters>\n"
     with open(net_out_path, "w") as f:
@@ -199,15 +205,15 @@ def run(params):
 
     # load network weights
     if params["runconfig"]["load_dir"]:
-        net_path = os.path.join(self_dir, params["runconfig"]["load_dir"])
+        net_path = self_dir / params["runconfig"]["load_dir"]
         net.load_state_dict(torch.load(net_path, map_location=device))
 
     # transfer to device
     net.to(device)
 
-    #
-    # Training
-    #
+    # </network>
+
+    # <train>
 
     if Mode.TRAIN in mode:
         # create optimizer
@@ -222,9 +228,7 @@ def run(params):
         loss_fn = torch.nn.MSELoss()
 
         # checkpointing for saving network weights
-        checkpoint_dir = os.path.join(
-            self_dir, params["runconfig"]["save_dir"], "checkpoints"
-        )
+        checkpoint_dir = self_dir / params["runconfig"]["save_dir"] / "checkpoints"
         checkpoint_epochs = params["runconfig"]["save_checkpoints_epochs"]
 
         if Mode.PROFILE in mode:
@@ -236,9 +240,7 @@ def run(params):
                 device=device,
                 inputs_transform_fn=train_input_transform_fn,
             )
-            log_profile_dir = os.path.join(
-                self_dir, params["runconfig"]["save_dir"], "profile"
-            )
+            log_profile_dir = self_dir / params["runconfig"]["save_dir"] / "profile"
 
             profile_train_batches(
                 train_batches,
@@ -268,9 +270,9 @@ def run(params):
             time_train = train_dlog.get("time_train")
             print(f"</train>")
 
-    #
-    # Prediction
-    #
+    # </train>
+
+    # <predict>
 
     if not mode.any(Mode.PREDICT | Mode.EVAL):
         return
@@ -321,9 +323,9 @@ def run(params):
 
     print("</predict>")
 
-    #
-    # Evaluation
-    #
+    # </predict>
+
+    # <evaluate>
 
     if Mode.EVAL not in mode:
         return
@@ -353,9 +355,9 @@ def run(params):
 
     print("</evaluate>")
 
-    #
-    # Output
-    #
+    # </evaluate>
+
+    # <output>
 
     # print runtimes
     logger.info(f"Runtime - train [sec]: {time_train}")
@@ -387,7 +389,7 @@ def run(params):
         )
 
     # plot loss
-    path = os.path.join(self_dir, params["runconfig"]["save_dir"], "loss")
+    path = self_dir / params["runconfig"]["save_dir"] / "loss"
     plot_loss(
         train_dlog["loss_mean"],
         path,
@@ -410,9 +412,7 @@ def run(params):
         plot_targets_pred = [eval_targets_pred[key][:, i] for i in range(ntrg)]
         plot_name = [f"param_{i}" for i in range(ntrg)]
         # plot true values vs. predictions
-        path = os.path.join(
-            self_dir, params["runconfig"]["save_dir"], "data_vs_predict_" + key
-        )
+        path = self_dir / params["runconfig"]["save_dir"] / "data_vs_predict_" + key
         plot_data_vs_predict(
             plot_targets_data,
             plot_targets_pred,
@@ -422,9 +422,7 @@ def run(params):
             y_label=ntrg * [f"predicted value"],
         )
         # plot prediction errors
-        path = os.path.join(
-            self_dir, params["runconfig"]["save_dir"], "predict_error_" + key
-        )
+        path = self_dir / params["runconfig"]["save_dir"] / "predict_error_" + key
         plot_data_vs_predict_error(
             plot_targets_data,
             plot_targets_pred,
@@ -437,6 +435,8 @@ def run(params):
     # show plots
     if params["runconfig"]["show_plots"]:
         plt.show()
+
+    # </output>
 
 
 ###############################################################################
