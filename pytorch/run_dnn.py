@@ -412,7 +412,7 @@ def run(params):
         plot_targets_pred = [eval_targets_pred[key][:, i] for i in range(ntrg)]
         plot_name = [f"param_{i}" for i in range(ntrg)]
         # plot true values vs. predictions
-        path = self_dir / params["runconfig"]["save_dir"] / "data_vs_predict_" + key
+        path = self_dir / params["runconfig"]["save_dir"] / f"data_vs_predict_{key}"
         plot_data_vs_predict(
             plot_targets_data,
             plot_targets_pred,
@@ -422,7 +422,7 @@ def run(params):
             y_label=ntrg * [f"predicted value"],
         )
         # plot prediction errors
-        path = self_dir / params["runconfig"]["save_dir"] / "predict_error_" + key
+        path = self_dir / params["runconfig"]["save_dir"] / f"predict_error_{key}"
         plot_data_vs_predict_error(
             plot_targets_data,
             plot_targets_pred,
