@@ -4,12 +4,11 @@ Handling of data.
 
 import inspect
 import logging
-import os  # TODO: remove dependency, use pathlib instead
+import os
 import pathlib
 
 import numpy as np
-
-from utils.utils import Mode
+from dlk.mode import Mode
 
 ###############################################################################
 
@@ -40,7 +39,7 @@ def dictarray_is_not_none(arr):
 
 def _load_memmap(data_file, cols_num, dtype=np.float32):
     data_points = cols_num
-    data_file_size = os.path.getsize(data_file)
+    data_file_size = os.path.getsize(data_file)  # TODO: use pathlib instead
     data_rows = data_file_size // (data_points * 4)
     return np.memmap(data_file, dtype=dtype, mode="r", shape=(data_rows, data_points))
 

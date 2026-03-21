@@ -1,114 +1,4 @@
 """
-Enumerators
-"""
-
-import enum
-
-
-class Mode(enum.Flag):
-    TRAIN = enum.auto()
-    PROFILE = enum.auto()
-    VALIDATE = enum.auto()
-    PREDICT = enum.auto()
-    EVAL = enum.auto()
-
-    @classmethod
-    def get_from_name(cls, name):
-        for mode in cls:
-            if mode.name == name.upper():
-                return mode
-        raise ValueError(f"Unknown name for mode: {repr(name)}")
-
-    def any(self, modes):
-        return any(m in self for m in modes)
-
-
-class NetworkType(enum.Enum):
-    MLPNET = enum.auto()
-    MLPRESNET = enum.auto()
-    CONVNET = enum.auto()
-    CONVRESNET = enum.auto()
-    EFFICIENTNET = enum.auto()
-    TRANSFORMERNET = enum.auto()
-
-    @classmethod
-    def get_from_name(cls, name):
-        for type in cls:
-            if type.name == name.upper():
-                return type
-        raise ValueError(f"Unknown name for model type: {repr(name)}")
-
-
-###############################################################################
-
-
-"""
-Runtime parameters
-"""
-
-import os
-import pathlib
-
-import yaml
-
-
-def load_parameters(filepath):
-    """Reads a yaml file and returns a dictionary.
-
-    :param string filepath: Path to yaml file
-    """
-    # load yaml file
-    with open(filepath, "r") as f:
-        params = yaml.safe_load(f)
-    return params
-
-
-def save_parameters(params, save_dir, filename="params.yaml"):
-    """Saves a dictionary to a file in contained in save_dir.
-
-    :param dict params: dict we want to write to a file in save_dir
-    :param string save_dir: Directory we want to write to
-    :param string filename: Name of file in save_dir we want to save to.
-    """
-    if not save_dir:
-        raise ValueError(
-            "save_dir is not provided. For saving params, a user-defined"
-            + " save_dir must be passed through the yaml file"
-        )
-    # set path and create subdirectories
-    path = pathlib.Path(save_dir) / filename
-    try:
-        os.makedirs(str(path.parent), exist_ok=True)
-    except OSError:
-        raise ValueError(f"Invalid path {save_dir} provided. Check the save_dir path!")
-    # save yaml file
-    with open(path, "w+") as f:
-        yaml.dump(params, f, default_flow_style=False)
-
-
-def update_parameters_from_args(runconfig_params, args):
-    """
-    Sets command line arguments from arguments into parameters.
-
-    :param dict params: runconfig dict we want to update
-    :param argparse namespace args: Command line arguments
-    """
-    # copy arguments to parameters
-    if args:
-        for k, v in list(vars(args).items()):
-            runconfig_params[k] = v if v is not None else runconfig_params.get(k)
-    # Provisional handling of negative or 0 values. According to the estimator
-    # source code passing negative or 0 steps raises an error in the estimator.
-    # However, handling None in yaml is not straightforward. We have to pass
-    # `null` there which is converted to None in python which is clumsy for users.
-    if runconfig_params.get("eval_steps") is not None:
-        if runconfig_params["eval_steps"] <= 0:
-            runconfig_params["eval_steps"] = None
-
-
-###############################################################################
-
-"""
 Plotting
 """
 
@@ -231,7 +121,7 @@ def plot_data_vs_predict(
 ):
     """Saves raw true (data) values vs. predictions and plots these as scatter plots."""
     lim = list()
-    for i, (x_, _) in enumerate(zip(data, predict)):
+    for x_, _ in zip(data, predict):
         lim.append([np.min(x_), np.max(x_)])
     plot_data_vs_qoi(
         data,

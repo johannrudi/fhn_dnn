@@ -2,6 +2,7 @@
 Create neural networks.
 """
 
+import enum
 import math
 
 import torch.nn as nn
@@ -14,7 +15,26 @@ from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 from dlk.nets.unet import EncoderNet1d_2021 as EncoderConvNet
 from dlk.nets.unet import UNet1d_2021 as UNet
 
-from utils.utils import NetworkType
+# --------------------------------------
+# Neural Network Types
+# --------------------------------------
+
+
+class NetworkType(enum.Enum):
+    MLPNET = enum.auto()
+    MLPRESNET = enum.auto()
+    CONVNET = enum.auto()
+    CONVRESNET = enum.auto()
+    EFFICIENTNET = enum.auto()
+    TRANSFORMERNET = enum.auto()
+
+    @classmethod
+    def get_from_name(cls, name):
+        for type in cls:
+            if type.name == name.upper():
+                return type
+        raise ValueError(f"Unknown name for model type: {repr(name)}")
+
 
 # --------------------------------------
 # Neural Networks for Inverse Maps

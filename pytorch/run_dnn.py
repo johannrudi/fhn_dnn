@@ -4,7 +4,6 @@ Run training and evaluation of DNN-based inverse map.
 
 import argparse
 import os
-import pathlib
 import pprint
 import random
 import sys
@@ -14,26 +13,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.metrics as metrics
 import torch
-from dlk.log.log_util import logging_get_logger, logging_set_up
-from dlk.nets.util import get_parameters
+from dlk.mgmt import parameters as config_params
+from dlk.mgmt.log import logging_get_logger, logging_set_up
+from dlk.mode import Mode, get_mode_from_name
+from dlk.nets.utils import get_parameters
 from dlk.opt.train import train_epochs
-from tqdm import tqdm
-
-sys.path.append(str(pathlib.Path(__file__).parent.parent))
-
 from nets import create_ae, create_network
 from opt_utils import create_lr_scheduler, create_optimizer
+from plot_utils import plot_data_vs_predict, plot_data_vs_predict_error, plot_loss
+from tqdm import tqdm
 
 from data import (create_dataloader, dictarray_is_not_none, load_data,
                   postprocess_targets, preprocess_features, preprocess_targets)
-from utils.utils import (Mode, load_parameters, plot_data_vs_predict,
-                         plot_data_vs_predict_error, plot_loss, save_parameters,
-                         update_parameters_from_args)
 
 ###############################################################################
 
 
-def run(args, params):
+def run(params):
     # set environment
     self_dir = os.path.dirname(os.path.abspath(__file__))
     enable_debug = params["runconfig"].get("debug")
@@ -44,15 +40,13 @@ def run(args, params):
 
     # set mode
     mode_name = params["runconfig"]["mode"]
-    mode = None
-    for name in mode_name.split("_"):
-        m = Mode[name.upper()]
-        mode = m if mode is None else mode | m
+    mode = get_mode_from_name(mode_name)
+    assert mode is not None
 
     # set key for data
-    if mode is not None and Mode.TRAIN in mode:
+    if Mode.TRAIN in mode:
         mode_to_data_key = "train"
-    elif mode is not None and mode.any(Mode.PREDICT | Mode.EVAL):
+    elif mode.any(Mode.PREDICT | Mode.EVAL):
         mode_to_data_key = "test"
     else:
         raise NotImplementedError()
@@ -62,11 +56,11 @@ def run(args, params):
     logger = logging_get_logger("run_dnn")
 
     # log environment
-    logger.info(f"Environment - Directory:       {self_dir}")
-    logger.info(f"Environment - PyTorch version: {torch.__version__}")
-    logger.info(f"Environment - Seed:            {params['data']['random_seed']}")
-    logger.info(f"Environment - Mode:            {mode} (--mode {mode_name})")
-    logger.info(f"Environment - Data key:        {mode_to_data_key}")
+    logger.info(f"Environment - Directory:         {self_dir}")
+    logger.info(f"Environment - PyTorch version:   {torch.__version__}")
+    logger.info(f"Environment - Seed:              {params['data']['random_seed']}")
+    logger.info(f"Environment - Mode:              {mode} (--mode {mode_name})")
+    logger.info(f"Environment - Data key:          {mode_to_data_key}")
     logger.info(f"Environment - CPU logical cores: {cpu_logical_cores}")
     logger.info(f"Environment - Torch device:      {device}")
     # print parameters
@@ -302,7 +296,6 @@ def run(args, params):
     eval_targets_pred, eval_targets_data = predict(
         net,
         eval_dataloader,
-        params,
         device,
         input_transform_fn=train_input_transform_fn,
     )
@@ -449,7 +442,7 @@ def run(args, params):
 ###############################################################################
 
 
-def predict(net, eval_dataloader, params, device, input_transform_fn=None):
+def predict(net, eval_dataloader, device, input_transform_fn=None):
     net.eval()
     # get network predictions
     data = dict()
@@ -498,51 +491,31 @@ def eval_data_vs_pred(data, pred):
 ###############################################################################
 
 
-def create_arg_parser():
-    """
-    Create parser for command line args.
-
-    :returns: ArgumentParser
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-p",
-        "--params",
-        default="./configs/params_dnn.yaml",
-        help="Path to .yaml file with parameters",
-    )
-    parser.add_argument(
-        "-m",
-        "--mode",
-        choices=[
-            "train",
-            "predict",
-            "eval",
-            "train_eval",
-            "train_predict",
-            "train_profile",
-        ],
-        default="train_eval",
-        help=(
-            "Can train, predict, eval, and combine train_eval (default)."
-            + "  eval runs on available checkpoints."
-            + "  train_eval runs train, predict, and eval."
-            + "  train_profile runs profiling of a few training steps."
-        ),
-    )
-    return parser
-
-
 def main():
     # get arguments
-    parser = create_arg_parser()
+    parser = argparse.ArgumentParser()
+    config_params.add_args_to_parser(
+        parser, default_params_path="configs/params_dnn.yaml"
+    )
     args = parser.parse_args(sys.argv[1:])
-    # load parameters, and save them for reproducibility
-    params = load_parameters(args.params)
-    update_parameters_from_args(params["runconfig"], args)
-    save_parameters(params, save_dir=params["runconfig"]["save_dir"])
+
+    # load parameters from a file
+    params = config_params.load(args.params)
+
+    # set/override runconfig parameters from args
+    config_params.update_runconfig_params_from_args(params["runconfig"], args)
+
+    # override parameters from JSON and/or TOML inputs
+    if args.json_params is not None:
+        config_params.update_from_json(params, args.json_params)
+    if args.toml_params is not None:
+        config_params.update_from_toml(params, args.toml_params)
+
+    # save parameters for reproducibility
+    config_params.save(params, save_dir=params["runconfig"]["save_dir"])
+
     # run script
-    run(args, params)
+    run(params)
 
 
 if __name__ == "__main__":
