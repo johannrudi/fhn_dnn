@@ -1,11 +1,9 @@
 description: "Options for DNN-based inverse maps"
 
 data:
-    data_dir: '../data/2020-12-09'  # relative path to data directory
+    data_dir: "../data/2020-12-09"  # relative path to data directory
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
-    features_use_channels_range:
-        - 0
-        - 1
+    features_use_channels_range: [0, 1]
     features_normalize: False       # scale features to have zero mean and unit std
     features_sub_length: 1000       # use sub interval of this size
     features_sub_begin_random: True # flag to pick a sub interval at random
@@ -18,7 +16,7 @@ data:
     Ntrain:    1024
     Nvalidate: 1000
     Ntest:     2000
-    train_shuffle_buffer_size: 1000
+    train_shuffle_buffer_size: 1024
     train_batch_size: 256
     eval_batch_size:  256
     random_seed: 123
