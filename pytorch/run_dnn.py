@@ -366,7 +366,7 @@ def run(params):
     # print runtimes
     logger.info(f"Runtime - train [sec]: {time_train}")
     logger.info(f"Runtime - eval [sec]:  {time_eval}")
-    if 0 < time_train:
+    if Mode.TRAIN in mode:
         n_epoch = params["training"]["epochs"]
         n_steps = params["training"]["epochs"] * (
             params["data"]["Ntrain"] // params["data"]["train_batch_size"]
@@ -383,7 +383,7 @@ def run(params):
         logger.info(
             f"Runtime statistics - train - avg. samples/sec: {n_steps*n_samples/time_train}"
         )
-    if 0 < time_eval:
+    if mode.any(Mode.PREDICT | Mode.EVAL):
         n_samples = (
             params["data"]["Ntest"] // params["data"]["eval_batch_size"]
         ) * params["data"]["eval_batch_size"]
@@ -403,6 +403,8 @@ def run(params):
         x_offset=1,
         y_scale="log",
     )
+    if not params["runconfig"]["show_plots"]:
+        plt.close()
 
     # plot predictions
     for key in eval_targets_data.keys():
@@ -435,6 +437,8 @@ def run(params):
             x_label=ntrg * [f"{key} value"],
             y_label=ntrg * [f"prediction error"],
         )
+    if not params["runconfig"]["show_plots"]:
+        plt.close()
 
     # show plots
     if params["runconfig"]["show_plots"]:
