@@ -9,6 +9,7 @@ import pprint
 import random
 import sys
 import timeit
+from collections.abc import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,16 +19,12 @@ from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger, logging_set_up
 from dlk.mode import Mode, get_mode_from_name
 from dlk.nets.utils import get_parameters
-from dlk.opt.train import train_epochs
 from nets import create_ae, create_network
-from opt_utils import create_lr_scheduler, create_optimizer
 from plot_utils import plot_data_vs_predict, plot_data_vs_predict_error, plot_loss
 from tqdm import tqdm
 
 from data import (create_dataloader, dictarray_is_not_none, load_data,
                   postprocess_targets, preprocess_features, preprocess_targets)
-
-###############################################################################
 
 
 def run(params):
@@ -115,12 +112,12 @@ def run(params):
     )
 
     # set transform functions
-    features_transform_fn = None  # used in dataloader
-    train_input_transform_fn = None  # used in training loops
+    features_transform_fn: Callable | None = None  # used in dataloader
+    train_input_transform_fn: Callable | None = None  # used in training loops
 
     if params["data"].get("features_fft"):
 
-        def features_transform_fn(features):
+        def _fft_transform(features):
             # subsample features
             features_half = features[..., ::2]
             size = features_half.size()
@@ -131,9 +128,11 @@ def run(params):
 
             # concatenate features and FFT real and imag parts
             features_transformed = torch.concatenate(
-                (features_half, features_fft.real, features_fft.imag), axis=1
+                (features_half, features_fft.real, features_fft.imag), dim=1
             )
             return features_transformed
+
+        features_transform_fn = _fft_transform
 
     ####DEV
     if params["data"].get("autoencoder_load_dir"):
@@ -216,6 +215,9 @@ def run(params):
     # <train>
 
     if Mode.TRAIN in mode:
+        from dlk.opt.train import train_epochs
+        from opt_utils import create_lr_scheduler, create_optimizer
+
         # create optimizer
         optimizer = create_optimizer(net, params["optimizer"])
 
@@ -256,18 +258,18 @@ def run(params):
             # train network
             print(f"<train>")
             train_dlog = train_epochs(
-                params["training"]["epochs"],
-                net,
-                dataloader,
-                optimizer,
-                loss_fn,
+                n_epochs=params["training"]["epochs"],
+                net=net,
+                dataloader=dataloader,
+                optimizer=optimizer,
+                loss_fn=loss_fn,
                 lr_scheduler=lr_scheduler,
                 device=device,
                 inputs_transform_fn=train_input_transform_fn,
                 checkpoint_epochs=checkpoint_epochs,
                 checkpoint_dir=checkpoint_dir,
             )
-            time_train = train_dlog.get("time_train")
+            time_train = train_dlog.get("time_train", np.nan)
             print(f"</train>")
 
     # </train>
@@ -305,6 +307,8 @@ def run(params):
 
     # postprocess evaluation data
     if dictarray_is_not_none(targets) and dictarray_is_not_none(targets_noise):
+        assert targets_scale is not None
+        assert targets_noise_scale is not None
         eval_targets_scale = {}
         for key in targets_scale.keys():
             eval_targets_scale[key] = np.concatenate(
@@ -439,7 +443,7 @@ def run(params):
     # </output>
 
 
-###############################################################################
+# ---------------------------------------
 
 
 def predict(net, eval_dataloader, device, input_transform_fn=None):
@@ -488,7 +492,7 @@ def eval_data_vs_pred(data, pred):
     return eval_mse, eval_mae, eval_r2
 
 
-###############################################################################
+# ---------------------------------------
 
 
 def main():

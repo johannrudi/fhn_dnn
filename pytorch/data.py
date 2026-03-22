@@ -8,9 +8,11 @@ import os
 import pathlib
 
 import numpy as np
+import torch
 from dlk.mode import Mode
+from torch.utils.data import DataLoader, Dataset
 
-###############################################################################
+# ---------------------------------------
 
 
 def dictarray_empty():
@@ -34,7 +36,7 @@ def dictarray_is_not_none(arr):
     return not dictarray_is_none(arr)
 
 
-###############################################################################
+# ---------------------------------------
 
 
 def _load_memmap(data_file, cols_num, dtype=np.float32):
@@ -64,8 +66,9 @@ def _load_array(data_file, cols_num=None, dtype=np.float32, expand_dims_axis=Non
 def _load_and_split_arrays(data_params, logger=None):
     # set up logger
     if logger is None:
+        frame = inspect.currentframe()
         logger = logging.getLogger(
-            f"{__name__}.{inspect.currentframe().f_code.co_name}"
+            f"{__name__}.{frame.f_code.co_name}" if frame is not None else __name__
         )
 
     # set options
@@ -429,7 +432,7 @@ def load_timesteps(params):
     return timesteps
 
 
-###############################################################################
+# ---------------------------------------
 
 # def _log_transform(data, shift=0.0):
 #    """ Applies log-transform for preprocessing. """
@@ -542,17 +545,17 @@ def preprocess_features(features, params, logger, scale=None, array_name="featur
     return scale
 
 
-def postprocess_features(features, scale, params):
+def postprocess_features(features, scale):
     # exit if nothing to do
     if dictarray_is_none(features):
         return
-    features_type = params["data"]["features_type"].casefold()
     # apply inverse scaling
     features = _apply_scale_inverse(features, scale)
 
 
 # DEV
 #   # apply inverse scaling
+#   features_type = params["data"]["features_type"].casefold()
 #   if features_type == 'RATE_DURATION'.casefold():
 #       features = _apply_scale_inverse(features, scale)
 #       #TODO apply inverse transforms
@@ -598,7 +601,7 @@ def postprocess_targets(targets, scale):
     targets = _apply_scale_inverse(targets, scale)
 
 
-###############################################################################
+# ---------------------------------------
 
 
 def _get_positions_from_histogram(data, range, n_bins, relevant_bins_threshold):
@@ -675,26 +678,28 @@ def get_conditional_positions(features: np.ndarray, params):
     return cond_positions
 
 
-def _filter_samples(features, targets, position, threshold):
+def _filter_samples(
+    features: torch.Tensor,
+    targets: torch.Tensor,
+    position,
+    threshold,
+):
     # filter features
     if features.shape[-1] == len(position):
         # if as many positions as features: threshold positions across all features
         for i, (pos, thresh) in enumerate(zip(position, threshold)):
             features_ = features[..., i].flatten()
-            idx_thresh = np.logical_and(
-                (pos - thresh) < features_, features_ < (pos + thresh)
-            )
-            if 0 == i:
-                indices = idx_thresh
-            else:
-                indices = np.logical_and(indices, idx_thresh)
+            idx_thresh = (pos - thresh < features_) & (features_ < pos + thresh)
+            indices = idx_thresh if i == 0 else indices & idx_thresh
     elif 1 == len(position) and features.shape[1:] == position[0].shape[1:]:
         # if positions are samples: threshold by the normed distance to samples
         sample = position[0]
         thresh = threshold[0]
         assert 1 == sample.shape[0]
-        distances = np.linalg.norm(features - sample, axis=(1, 2))
-        indices = np.where(distances < thresh)[0]
+        distances = torch.linalg.norm(features - sample, dim=(1, 2))
+        indices = torch.where(distances < thresh)[0]
+    if 0 == np.sum(indices):
+        raise ValueError(f"empty filtering result")
     features_filtered = features[indices]
     # apply filter to targets
     if 2 == targets.ndim:
@@ -707,7 +712,10 @@ def _filter_samples(features, targets, position, threshold):
 
 
 def get_conditional_samples(
-    features: np.ndarray, targets: np.ndarray, position, params
+    features: torch.Tensor,
+    targets: torch.Tensor,
+    position,
+    params,
 ):
     features_type = params["data"]["features_type"].casefold()
     # extract conditional samples
@@ -717,7 +725,7 @@ def get_conditional_samples(
         "TIME_NOISE".casefold(),
         "NOISE".casefold(),
     ]:
-        threshold = [0.01 * np.prod(features.shape[1:])]
+        threshold = [0.01 * features[0].numel()]
         features_cond, targets_cond = _filter_samples(
             features, targets, position, threshold
         )
@@ -734,10 +742,7 @@ def get_conditional_samples(
     return features_cond, targets_cond
 
 
-###############################################################################
-
-import torch
-from torch.utils.data import DataLoader, Dataset, TensorDataset
+# ---------------------------------------
 
 
 class FHN_Dataset(Dataset):
@@ -761,22 +766,38 @@ class FHN_Dataset(Dataset):
         assert targets_noise is None or features_noise is not None
         # set arrays from arguments
         if features is not None:
-            self.features = torch.from_numpy(features)
+            self.features = (
+                features
+                if isinstance(features, torch.Tensor)
+                else torch.from_numpy(features)
+            )
         else:
             self.features = None
         if targets is not None:
-            self.targets = torch.from_numpy(targets)
+            self.targets = (
+                targets
+                if isinstance(targets, torch.Tensor)
+                else torch.from_numpy(targets)
+            )
             assert self.features is None or self.targets.size(0) == self.features.size(
                 0
             )
         else:
             self.targets = None
         if features_noise is not None:
-            self.features_noise = torch.from_numpy(features_noise)
+            self.features_noise = (
+                features_noise
+                if isinstance(features_noise, torch.Tensor)
+                else torch.from_numpy(features_noise)
+            )
         else:
             self.features_noise = None
         if targets_noise is not None:
-            self.targets_noise = torch.from_numpy(targets_noise)
+            self.targets_noise = (
+                targets_noise
+                if isinstance(targets_noise, torch.Tensor)
+                else torch.from_numpy(targets_noise)
+            )
         else:
             self.targets_noise = None
         # set from arguments
@@ -822,9 +843,13 @@ class FHN_Dataset(Dataset):
             features_transformed += self.features_additive_noise_std * torch.randn(
                 features_transformed.size()
             )
-        # TODO: fix linter warnings:
         # truncate features array
-        if self.features_sub_length and self.features_sub_length < features.size(-1):
+        if (
+            self.features_sub_length
+            and features is not None
+            and self.features_sub_length < features.size(-1)
+        ):
+            assert features_transformed is not None
             if self.features_sub_begin_random:
                 idx_begin = np.random.randint(
                     features.size(-1) - self.features_sub_length
@@ -835,7 +860,12 @@ class FHN_Dataset(Dataset):
             features = features[..., idx_begin:idx_end]
             features_transformed = features_transformed[..., idx_begin:idx_end]
         # truncate features with step length
-        if self.features_sub_step and 1 < self.features_sub_step:
+        if (
+            self.features_sub_step
+            and 1 < self.features_sub_step
+            and features is not None
+        ):
+            assert features_transformed is not None
             features = features[..., :: self.features_sub_step]
             features_transformed = features_transformed[..., :: self.features_sub_step]
         # transform features

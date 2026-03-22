@@ -76,7 +76,7 @@ def _create_MLPResNet(
     output_size,
     net_params,
     logger,
-    hidden_input_size=0,
+    hidden_input_size: int | list[int] = 0,
 ):
     activation_fn = _get_activation(net_params["activation_fn"])
     embed_size = net_params.get("embedding_size", 1)
@@ -154,7 +154,7 @@ def _create_convResNet(
     net_params,
     logger,
     mlb_kwargs={},
-    mlp_block_hidden_input_size=0,
+    mlp_block_hidden_input_size: int | list[int] = 0,
 ):
     activation_fn = _get_activation(net_params["activation_fn"])
     use_dropout = net_params.get("dropout", False)

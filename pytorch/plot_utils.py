@@ -38,16 +38,16 @@ def plot_loss(
     else:
         ax.plot(loss, "k-")
     # set up x-axis
-    ax.set_xlim([x_offset, len(loss)])
+    ax.set_xlim((x_offset, len(loss)))
     if x_twin:
         ax_twin = ax.twiny()
-        ax_twin.set_xlim([x_offset, n_epochs])
+        ax_twin.set_xlim((x_offset, n_epochs))
     else:
         xticks = ax.get_xticks()
         xticks_scaled = xticks * (n_epochs / (len(loss) + x_offset - 1))
         xticklabels = np.char.mod("%g", xticks_scaled)
         ax.set_xticks(xticks, labels=xticklabels)
-        ax.set_xlim([-0.5, len(loss)])
+        ax.set_xlim((-0.5, len(loss)))
     # set up x-axis
     ax.set_yscale(y_scale)
     # set labels
