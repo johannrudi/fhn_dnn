@@ -698,7 +698,7 @@ def _filter_samples(
         assert 1 == sample.shape[0]
         distances = torch.linalg.norm(features - sample, dim=(1, 2))
         indices = torch.where(distances < thresh)[0]
-    if 0 == np.sum(indices):
+    if 0 == torch.sum(indices):
         raise ValueError(f"empty filtering result")
     features_filtered = features[indices]
     # apply filter to targets
