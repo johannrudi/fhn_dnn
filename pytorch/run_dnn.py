@@ -19,12 +19,20 @@ from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger, logging_set_up
 from dlk.mode import Mode, get_mode_from_name
 from dlk.nets.utils import get_parameters
+from dlk.opt.optimizer import create_optimizer_from_config
+from dlk.opt.scheduler import create_learning_rate_scheduler_from_config
 from nets import create_ae, create_network
 from plot_utils import plot_data_vs_predict, plot_data_vs_predict_error, plot_loss
 from tqdm import tqdm
 
-from data import (create_dataloader, dictarray_is_not_none, load_data,
-                  postprocess_targets, preprocess_features, preprocess_targets)
+from data import (
+    create_dataloader,
+    dictarray_is_not_none,
+    load_data,
+    postprocess_targets,
+    preprocess_features,
+    preprocess_targets,
+)
 
 
 def run(params):
@@ -216,13 +224,12 @@ def run(params):
 
     if Mode.TRAIN in mode:
         from dlk.opt.train import train_epochs
-        from opt_utils import create_lr_scheduler, create_optimizer
 
         # create optimizer
-        optimizer = create_optimizer(net, params["optimizer"])
+        optimizer = create_optimizer_from_config(net, params["optimizer"])
 
         # create learning rate scheduler
-        lr_scheduler = create_lr_scheduler(
+        lr_scheduler = create_learning_rate_scheduler_from_config(
             optimizer, params["optimizer"], params["training"]["epochs"]
         )
 
