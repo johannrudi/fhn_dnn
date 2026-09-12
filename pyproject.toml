@@ -1,0 +1,134 @@
+[project]
+name =  "fhn-dnn"
+version = "0.3.0"
+authors = [
+    { name = "Johann Rudi", email = "jrudi@vt.edu" },
+]
+description = "Inference using Deep Neural Networks applied to FitzHugh-Nagumo ODE"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICEN[CS]E*"]
+requires-python = ">=3.11"
+dependencies = [
+    "deep-learning-toolkit[diffusion,kde]>=0.5",
+    "matplotlib>=3,<4",
+    "numpy>=2,<3",
+    "prettytable>=3,<4",
+    "pyyaml>=6,<7",
+    "sbi>=0.27",
+    "scikit-learn>=1,<2",
+    "torch>=2.11,<3",
+    "tqdm>=4,<5",
+]
+
+# Development dependencies
+# (https://docs.astral.sh/uv/concepts/projects/dependencies/#development-dependencies)
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39,<2",
+    "black>=25,<26",
+    "isort>=5,<6",
+]
+localdev = [
+    "deep-learning-toolkit[diffusion,kde]>=0.5",
+]
+
+# Accelerator groups for PyTorch
+# (select a build variant with, e.g., `uv sync --group cpu`; without a group,
+# `torch` resolves from PyPI: CUDA on Linux, CPU on macOS/Windows)
+cpu = ["torch>=2.11,<3"]
+cu126 = ["torch>=2.11,<3"]
+cu128 = ["torch>=2.11,<3"]
+cu130 = ["torch>=2.11,<3"]
+cu132 = ["torch>=2.11,<3"]
+xpu = ["torch>=2.11,<3", "triton-xpu"]
+
+# --------------------------------------
+# Tools
+# --------------------------------------
+
+[tool.basedpyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+extraPaths = ["pytorch"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["."]
+
+[tool.uv]
+# allow at most one accelerator group per environment
+# (uv locks each variant separately; `uv sync --all-groups` is rejected)
+conflicts = [
+    [
+        { group = "cpu" },
+        { group = "cu126" },
+        { group = "cu128" },
+        { group = "cu130" },
+        { group = "cu132" },
+        { group = "xpu" },
+    ],
+]
+
+# --------------------------------------
+# Package Sources
+# --------------------------------------
+
+[tool.uv.sources]
+
+# set `deep-learning-toolkit` source for local development
+deep-learning-toolkit = [
+    { path = "../../deep-learning-toolkit", editable = true, group = "localdev" },
+]
+
+# route `torch` to an accelerator index when the matching group is enabled
+torch = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu126", group = "cu126" },
+    { index = "pytorch-cu128", group = "cu128" },
+    { index = "pytorch-cu130", group = "cu130" },
+    { index = "pytorch-cu132", group = "cu132" },
+    { index = "pytorch-xpu", group = "xpu" },
+]
+
+# route `triton-xpu` to the same index as torch for the xpu group
+triton-xpu = [
+    { index = "pytorch-xpu", group = "xpu" },
+]
+
+# PyTorch indexes, marked explicit so they serve only the pinned packages
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true

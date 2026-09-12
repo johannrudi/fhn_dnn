@@ -1,7 +1,7 @@
-pyrightconfig.json
 # output files
 pytorch/runs/*
 tensorflow/runs/*
+
 # data files
 pytorch/*.npy
 tensorflow/*.pny
