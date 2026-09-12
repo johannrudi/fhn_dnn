@@ -39,6 +39,32 @@ def dictarray_is_not_none(arr):
 # ---------------------------------------
 
 
+def _resolve_data_params(params, scope):
+    """Merge the shared `data` block with the train/evaluate-specific blocks.
+
+    Args:
+        params (dict): full parameter tree with `data`, `data_train`, `data_evaluate`.
+        scope (str): one of "train", "evaluate", "all". "all" merges both
+            mode-specific blocks on top of `data`, with `data_train` winning
+            over `data_evaluate` on any conflicting key.
+
+    Returns:
+        dict: flat dict combining the relevant blocks.
+
+    Note:
+        On conflicting duplicated keys under scope "all", `data_train` wins
+        while mode-specific dataloaders still follow their own block.
+    """
+    if scope == "train":
+        return {**params["data"], **params["data_train"]}
+    elif scope == "evaluate":
+        return {**params["data"], **params["data_evaluate"]}
+    elif scope == "all":
+        return {**params["data"], **params["data_evaluate"], **params["data_train"]}
+    else:
+        raise ValueError(f"Unknown scope: {scope}")
+
+
 def _load_memmap(data_file, cols_num, dtype=np.float32):
     data_points = cols_num
     data_file_size = os.path.getsize(data_file)  # TODO: use pathlib instead
@@ -342,7 +368,7 @@ def _load_and_split_arrays(data_params, logger=None):
 
 
 def load_data(params, logger):
-    data_params = params["data"]
+    data_params = _resolve_data_params(params, "all")
 
     # read data and split files
     features, targets, features_noise, targets_noise = _load_and_split_arrays(
@@ -375,26 +401,26 @@ def load_data(params, logger):
     if "num_features" not in params["data"]:
         if dictarray_is_not_none(features):
             params["data"]["num_features"] = list(features["train"].shape[1:])
-            params["data"].setdefault("Ntest", features["test"].shape[0])
+            params["data_evaluate"].setdefault("Ntest", features["test"].shape[0])
         elif dictarray_is_not_none(features_noise):
             params["data"]["num_features"] = list(features_noise["train"].shape[1:])
-            params["data"].setdefault("Ntest", features_noise["test"].shape[0])
+            params["data_evaluate"].setdefault(
+                "Ntest", features_noise["test"].shape[0]
+            )
         else:
             raise NotImplementedError()
         # set reduced feature sizes
         if (
-            params["data"].get("features_sub_length")
-            and params["data"]["features_sub_length"]
-            < params["data"]["num_features"][-1]
+            data_params.get("features_sub_length")
+            and data_params["features_sub_length"] < params["data"]["num_features"][-1]
         ):
-            params["data"]["num_features"][-1] = params["data"]["features_sub_length"]
+            params["data"]["num_features"][-1] = data_params["features_sub_length"]
         if (
-            params["data"].get("features_sub_step")
-            and 1 < params["data"]["features_sub_step"]
+            data_params.get("features_sub_step")
+            and 1 < data_params["features_sub_step"]
         ):
             params["data"]["num_features"][-1] = (
-                params["data"]["num_features"][-1]
-                // params["data"]["features_sub_step"]
+                params["data"]["num_features"][-1] // data_params["features_sub_step"]
             )
 
     # set targets sizes
@@ -477,7 +503,8 @@ def preprocess_features(features, params, logger, scale=None, array_name="featur
     # exit if nothing to do
     if dictarray_is_none(features):
         return None
-    features_type = params["data"]["features_type"].casefold()
+    data_params = _resolve_data_params(params, "all")
+    features_type = data_params["features_type"].casefold()
     # DEV
     #   # apply transformation
     #   if features_type == 'RATE_DURATION'.casefold():
@@ -619,7 +646,8 @@ def _get_positions_from_histogram(data, range, n_bins, relevant_bins_threshold):
 def get_conditional_positions(features: np.ndarray, params):
     """Tuned for data set 2020-12-09."""
     data_dir = params["data"]["data_dir"]
-    features_type = params["data"]["features_type"].casefold()
+    data_params = _resolve_data_params(params, "all")
+    features_type = data_params["features_type"].casefold()
     # set function parameters
     fn_params = {
         "n_bins": {
@@ -717,7 +745,8 @@ def get_conditional_samples(
     position,
     params,
 ):
-    features_type = params["data"]["features_type"].casefold()
+    data_params = _resolve_data_params(params, "all")
+    features_type = data_params["features_type"].casefold()
     # extract conditional samples
     assert 1 < features.shape[0]
     if features_type in [
@@ -953,19 +982,25 @@ def create_dataloader(
     """Creates a PyTorch dataset and dataloader from numpy arrays.
     Ref: https://pytorch.org/docs/stable/data.html
     """
-    features_additive_noise_std = params["data"].get("features_additive_noise_std", 0.0)
-    features_sub_length = params["data"].get("features_sub_length", 0)
-    features_sub_begin_random = params["data"].get("features_sub_begin_random", False)
-    features_sub_begin_sequence = params["data"].get("features_sub_begin_sequence")
-    features_sub_step = params["data"].get("features_sub_step")
+    mode_scope = "train" if mode.any(Mode.TRAIN | Mode.PROFILE) else "evaluate"
+    mode_data_params = _resolve_data_params(params, mode_scope)
+    features_additive_noise_std = mode_data_params.get(
+        "features_additive_noise_std", 0.0
+    )
+    features_sub_length = mode_data_params.get("features_sub_length", 0)
+    features_sub_begin_random = mode_data_params.get(
+        "features_sub_begin_random", False
+    )
+    features_sub_begin_sequence = mode_data_params.get("features_sub_begin_sequence")
+    features_sub_step = mode_data_params.get("features_sub_step")
     item_return_order = params["dataloader"]["item_return_order"]
 
     if mode.any(Mode.TRAIN | Mode.PROFILE):
         shuffle = True
-        batch_size = params["data"]["train_batch_size"]
+        batch_size = mode_data_params["train_batch_size"]
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         shuffle = False
-        batch_size = params["data"]["eval_batch_size"]
+        batch_size = mode_data_params["eval_batch_size"]
         if 0 < features_sub_length and features_sub_begin_random:
             features_sub_begin_random = False
             assert features_sub_begin_sequence is None

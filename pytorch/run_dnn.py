@@ -376,9 +376,10 @@ def run(params):
     if Mode.TRAIN in mode:
         n_epoch = params["training"]["epochs"]
         n_steps = params["training"]["epochs"] * (
-            params["data"]["Ntrain"] // params["data"]["train_batch_size"]
+            params["data_train"]["Ntrain"]
+            // params["data_train"]["train_batch_size"]
         )
-        n_samples = params["data"]["train_batch_size"]
+        n_samples = params["data_train"]["train_batch_size"]
         logger.info(f"Runtime statistics - train - #epochs:          {n_epoch}")
         logger.info(f"Runtime statistics - train - #steps:           {n_steps}")
         logger.info(
@@ -392,8 +393,9 @@ def run(params):
         )
     if mode.any(Mode.PREDICT | Mode.EVAL):
         n_samples = (
-            params["data"]["Ntest"] // params["data"]["eval_batch_size"]
-        ) * params["data"]["eval_batch_size"]
+            params["data_evaluate"]["Ntest"]
+            // params["data_evaluate"]["eval_batch_size"]
+        ) * params["data_evaluate"]["eval_batch_size"]
         logger.info(f"Runtime statistics - eval  - #samples:         {n_samples}")
         logger.info(
             f"Runtime statistics - eval  - avg. samples/sec: {n_samples/time_eval}"
@@ -416,7 +418,11 @@ def run(params):
     # plot predictions
     for key in eval_targets_data.keys():
         # skip if no samples exist
-        if params["data"]["N" + key] <= 0:
+        n_key = "N" + key
+        n_samples_for_key = params["data_train"].get(
+            n_key, params["data_evaluate"].get(n_key)
+        )
+        if n_samples_for_key is None or n_samples_for_key <= 0:
             continue
         # set up plotting
         assert eval_targets_data[key].shape[1] == eval_targets_pred[key].shape[1]
