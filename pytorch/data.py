@@ -756,6 +756,7 @@ class FHN_Dataset(Dataset):
         features_transform_fn=None,
         features_sub_length=None,
         features_sub_begin_random=False,
+        features_sub_begin_sequence=None,
         features_sub_step=None,
         noise_idx_random=True,
         item_return_order="yx",
@@ -764,6 +765,11 @@ class FHN_Dataset(Dataset):
         assert features is not None or features_noise is not None
         assert targets is None or features is not None
         assert targets_noise is None or features_noise is not None
+        assert features_sub_begin_sequence is None or not features_sub_begin_random
+        assert features_sub_begin_sequence is None or 0 < len(
+            features_sub_begin_sequence
+        )
+
         # set arrays from arguments
         if features is not None:
             self.features = (
@@ -778,9 +784,6 @@ class FHN_Dataset(Dataset):
                 targets
                 if isinstance(targets, torch.Tensor)
                 else torch.from_numpy(targets)
-            )
-            assert self.features is None or self.targets.size(0) == self.features.size(
-                0
             )
         else:
             self.targets = None
@@ -800,26 +803,45 @@ class FHN_Dataset(Dataset):
             )
         else:
             self.targets_noise = None
+
+        # set the size of the dataset (not including multiple features_sub_begin_sequence)
+        if self.features is not None:
+            self.dataset_size = self.features.size(0)
+            assert self.targets is None or self.targets.size(0) == self.dataset_size
+        elif self.features_noise is not None:
+            self.dataset_size = self.features_noise.size(0)
+            assert (
+                self.targets_noise is None
+                or self.targets_noise.size(0) == self.dataset_size
+            )
+        else:
+            raise NotImplementedError()
+
         # set from arguments
         self.features_additive_noise_std = features_additive_noise_std
         self.features_transform_fn = features_transform_fn
         self.features_sub_length = features_sub_length
         self.features_sub_begin_random = features_sub_begin_random
+        self.features_sub_begin_sequence = features_sub_begin_sequence
         self.noise_idx_random = noise_idx_random
         self.item_return_order = item_return_order.casefold()
         self.features_sub_step = features_sub_step
 
     def __len__(self):
-        if self.features is not None:
-            return self.features.size(0)
-        elif self.features_noise is not None:
-            return self.features_noise.size(0)
-        else:
-            raise NotImplementedError()
+        if self.features_sub_begin_sequence is not None:
+            return self.dataset_size * len(self.features_sub_begin_sequence)
+        return self.dataset_size
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        if self.features_sub_begin_sequence is not None:
+            if isinstance(idx, int):
+                sub_idx = idx // self.dataset_size
+                idx = idx % self.dataset_size
+            else:
+                sub_idx = [i // self.dataset_size for i in idx]
+                idx = [i % self.dataset_size for i in idx]
         # get feature sample
         if self.features is not None:
             features = self.features[idx]
@@ -850,15 +872,32 @@ class FHN_Dataset(Dataset):
             and self.features_sub_length < features.size(-1)
         ):
             assert features_transformed is not None
+            K = self.features_sub_length
             if self.features_sub_begin_random:
-                idx_begin = np.random.randint(
-                    features.size(-1) - self.features_sub_length
-                )
+                k = np.random.randint(features.size(-1) - self.features_sub_length)
+                features = features[..., k : k + K]
+                features_transformed = features_transformed[..., k : k + K]
+            elif self.features_sub_begin_sequence is not None:
+                if isinstance(idx, int):
+                    assert isinstance(sub_idx, int)
+                    k = self.features_sub_begin_sequence[sub_idx]
+                    features = features[..., k : k + K]
+                    features_transformed = features_transformed[..., k : k + K]
+                else:
+                    assert isinstance(sub_idx, list)
+                    starts = [self.features_sub_begin_sequence[si] for si in sub_idx]
+                    features = torch.stack(
+                        [features[i][..., k : k + K] for i, k in enumerate(starts)]
+                    )
+                    features_transformed = torch.stack(
+                        [
+                            features_transformed[i][..., k : k + K]
+                            for i, k in enumerate(starts)
+                        ]
+                    )
             else:
-                idx_begin = 0
-            idx_end = idx_begin + self.features_sub_length
-            features = features[..., idx_begin:idx_end]
-            features_transformed = features_transformed[..., idx_begin:idx_end]
+                features = features[..., :K]
+                features_transformed = features_transformed[..., :K]
         # truncate features with step length
         if (
             self.features_sub_step
@@ -914,12 +953,26 @@ def create_dataloader(
     """Creates a PyTorch dataset and dataloader from numpy arrays.
     Ref: https://pytorch.org/docs/stable/data.html
     """
+    features_additive_noise_std = params["data"].get("features_additive_noise_std", 0.0)
+    features_sub_length = params["data"].get("features_sub_length", 0)
+    features_sub_begin_random = params["data"].get("features_sub_begin_random", False)
+    features_sub_begin_sequence = params["data"].get("features_sub_begin_sequence")
+    features_sub_step = params["data"].get("features_sub_step")
+    item_return_order = params["dataloader"]["item_return_order"]
+
     if mode.any(Mode.TRAIN | Mode.PROFILE):
         shuffle = True
         batch_size = params["data"]["train_batch_size"]
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         shuffle = False
         batch_size = params["data"]["eval_batch_size"]
+        if 0 < features_sub_length and features_sub_begin_random:
+            features_sub_begin_random = False
+            assert features_sub_begin_sequence is None
+            interval = features.shape[-1] - features_sub_length
+            features_sub_begin_sequence = [
+                i for i in range(0, interval, features_sub_length // 2)
+            ] + [interval]
     else:
         raise NotImplementedError()
 
@@ -933,16 +986,13 @@ def create_dataloader(
         targets,
         features_noise=features_noise,
         targets_noise=targets_noise,
-        features_additive_noise_std=params["data"].get(
-            "features_additive_noise_std", 0.0
-        ),
+        features_additive_noise_std=features_additive_noise_std,
         features_transform_fn=features_transform_fn,
-        features_sub_length=params["data"].get("features_sub_length", 0),
-        features_sub_begin_random=params["data"].get(
-            "features_sub_begin_random", False
-        ),
-        features_sub_step=params["data"].get("features_sub_step"),
-        item_return_order=params["dataloader"]["item_return_order"],
+        features_sub_length=features_sub_length,
+        features_sub_begin_random=features_sub_begin_random,
+        features_sub_begin_sequence=features_sub_begin_sequence,
+        features_sub_step=features_sub_step,
+        item_return_order=item_return_order,
         **dataset_kwargs,
     )
 

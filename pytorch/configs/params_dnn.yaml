@@ -5,8 +5,9 @@ data:
     features_type: 'TIME_NOISE'     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_use_channels_range: [0, 1]
     features_normalize: False       # scale features to have zero mean and unit std
-    features_sub_length: 1000       # use sub interval of this size
+    features_sub_length: 800        # use sub interval of this size
     features_sub_begin_random: True # flag to pick a sub interval at random
+    # features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
     # features_sub_step: 4            # subsample by this step size
     features_additive_noise_std: 0  # add i.i.d. noise
     # features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
@@ -17,8 +18,8 @@ data:
     Nvalidate: 1000
     Ntest:     2000
     train_shuffle_buffer_size: 1024
-    train_batch_size: 256
-    eval_batch_size:  256
+    train_batch_size: 128
+    eval_batch_size:  128
     random_seed: 123
     # use encoder network of an autoencoder
     # autoencoder_load_dir: 'runs/ae'
@@ -74,7 +75,7 @@ net:
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
 #   type: 'EfficientNet'
-#   dropout: 0.2
+#   dropout: 0.0
 
 #   type: 'TransformerNet'
 #   embedding_size: 128
@@ -105,8 +106,8 @@ training:
     epochs: 400
 
 runconfig:
-    load_dir: #'runs/dnn'
-    save_dir:  'runs/dnn'
+    load_dir: #'runs/fhn_data2020'
+    save_dir:  'runs/fhn_data2020'
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
