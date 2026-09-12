@@ -20,7 +20,6 @@ data:
     train_shuffle_buffer_size: 1024
     train_batch_size: 128
     eval_batch_size:  128
-    random_seed: 123
     # use encoder network of an autoencoder
     # autoencoder_load_dir: 'runs/ae'
     # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
@@ -111,4 +110,5 @@ runconfig:
     log_epochs: 1
     save_checkpoints_epochs: 50
     debug: True
+    random_seed: 123
     show_plots: False

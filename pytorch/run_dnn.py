@@ -60,6 +60,15 @@ def run(params):
     else:
         raise NotImplementedError()
 
+    # fix random seed for reproducibility
+    random_seed = params["runconfig"].get("random_seed")
+    if random_seed is not None:
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+    else:
+        params["runconfig"]["random_seed"] = None
+
     # set up logging
     logging_set_up(self_dir / params["runconfig"]["save_dir"] / self_name)
     logger = logging_get_logger(self_name)
@@ -69,7 +78,7 @@ def run(params):
     logger.info(f"Environment - PyTorch version:   {torch.__version__}")
     logger.info(f"Environment - CPU logical cores: {cpu_logical_cores}")
     logger.info(f"Environment - Torch device:      {device}")
-    logger.info(f"Environment - Seed:              {params['data'].get('random_seed')}")
+    logger.info(f"Environment - Seed:              {random_seed}")
     logger.info(f"Environment - Mode:              {mode} (--mode {mode_name})")
     logger.info(f"Environment - Data key:          {mode_to_data_key}")
 
@@ -79,15 +88,6 @@ def run(params):
         pp = pprint.PrettyPrinter(indent=4)
         pp.pprint(params)
         print("</parameters>")
-
-    # fix random seed for reproducibility
-    random_seed = params["data"].get("random_seed")
-    if random_seed is not None:
-        random.seed(random_seed)
-        np.random.seed(random_seed)
-        torch.manual_seed(random_seed)
-    else:
-        params["data"]["random_seed"] = None
 
     # </init>
 
