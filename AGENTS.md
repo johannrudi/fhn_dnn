@@ -1,12 +1,8 @@
-# WARP.md
-
-This file provides guidance to WARP (warp.dev) when working with code in this repository.
+# AGENTS.md
 
 ## Project Overview
 
 This repository implements parameter estimation for the FitzHugh-Nagumo ODE using Deep Neural Networks (DNNs). The codebase demonstrates neural network-based inverse maps that estimate ODE parameters from time-series data.
-
-**Reference Paper**: *Parameter Estimation with Dense and Convolutional Neural Networks Applied to the FitzHugh-Nagumo ODE* by Johann Rudi, Julie Bessac, Amanda Lenzi (2021). URL: https://arxiv.org/abs/2012.06691
 
 ## Build & Run Commands
 
@@ -22,12 +18,21 @@ pip install -r requirements.txt
 
 **Train a model:**
 ```bash
-python run_dnn.py --params configs/params_dnn.yaml --mode train
+uv run python train.py --params configs/params_dnn.yaml
+# legacy:
+uv run python run_dnn.py --params configs/params_dnn.yaml --mode train
 ```
 
 **Evaluate a model:**
 ```bash
-python run_dnn.py --params configs/params_dnn.yaml --mode eval
+uv run python evaluate.py --params configs/params_dnn.yaml
+# legacy:
+uv run python run_dnn.py --params configs/params_dnn.yaml --mode eval
+```
+
+**Train then evaluate (combined):**
+```bash
+uv run python run.py --params configs/params_dnn.yaml
 ```
 
 **Run autoencoder:**
@@ -84,10 +89,13 @@ python run_dnn.py
 - Also includes autoencoder (`Autoencoder`), U-Net, and GAN components
 
 **pytorch/run_dnn.py**
-- Main training/evaluation script
+- Legacy monolithic training/evaluation script
 - Orchestrates: data loading → preprocessing → network creation → training → evaluation
 - Generates plots (loss curves, predictions vs. ground truth, error plots)
 - Checkpointing support
+
+**pytorch/common.py**, **pytorch/train.py**, **pytorch/evaluate.py**, **pytorch/run.py**
+- Split entry points: shared setup in `common.py`; `train.py` trains and checkpoints; `evaluate.py` loads a checkpoint (or auto-discovers under `save_dir`) and runs predict/eval; `run.py` chains train then evaluate
 
 **utils/utils.py**
 - Shared enumerators (`ModeKeys`, `NetworkType`)
