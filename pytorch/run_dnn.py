@@ -200,8 +200,8 @@ def run(params):
     net = create_network(params, device, logging_get_logger("create_network"))
 
     # load network weights
-    if params["runconfig"]["load_dir"]:
-        net_path = self_dir / params["runconfig"]["load_dir"]
+    if params["runconfig"].get("load_checkpoint"):
+        net_path = self_dir / params["runconfig"]["load_checkpoint"]
         net.load_state_dict(torch.load(net_path, map_location=device))
 
     # </network>

@@ -119,7 +119,7 @@ training:
     epochs: 400
 
 runconfig:
-    load_dir: #'runs/fhn_data2020'
+    load_checkpoint: #'runs/fhn_data2020/checkpoints/<folder>/net_e<epoch>.pt'
     save_dir:  'runs/fhn_data2020'
     log_epochs: 1
     save_checkpoints_epochs: 50
