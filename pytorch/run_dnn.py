@@ -18,7 +18,6 @@ import torch
 from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger, logging_set_up
 from dlk.mode import Mode, get_mode_from_name
-from dlk.nets.utils import get_parameters
 from dlk.opt.optimizer import create_optimizer_from_config
 from dlk.opt.scheduler import create_learning_rate_scheduler_from_config
 from nets import create_ae, create_network
@@ -198,25 +197,12 @@ def run(params):
     # <network>
 
     # create network
-    net = create_network(params, logging_get_logger("create_network"))
-
-    # log network and parameters
-    _, _, net_params_table = get_parameters(net)
-    net_out_path = self_dir / params["runconfig"]["save_dir"] / "net.txt"
-    net_out = f"<network>\n{net}\n</network>\n"
-    net_out += f"<parameters>\n{net_params_table}\n</parameters>\n"
-    with open(net_out_path, "w") as f:
-        f.write(net_out)
-    if enable_debug:
-        print(net_out)
+    net = create_network(params, device, logging_get_logger("create_network"))
 
     # load network weights
     if params["runconfig"]["load_dir"]:
         net_path = self_dir / params["runconfig"]["load_dir"]
         net.load_state_dict(torch.load(net_path, map_location=device))
-
-    # transfer to device
-    net.to(device)
 
     # </network>
 
@@ -376,8 +362,7 @@ def run(params):
     if Mode.TRAIN in mode:
         n_epoch = params["training"]["epochs"]
         n_steps = params["training"]["epochs"] * (
-            params["data_train"]["Ntrain"]
-            // params["data_train"]["train_batch_size"]
+            params["data_train"]["Ntrain"] // params["data_train"]["train_batch_size"]
         )
         n_samples = params["data_train"]["train_batch_size"]
         logger.info(f"Runtime statistics - train - #epochs:          {n_epoch}")

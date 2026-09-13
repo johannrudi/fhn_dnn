@@ -3,8 +3,11 @@ Create neural networks.
 """
 
 import enum
+import logging
 import math
+import pathlib
 
+import torch
 import torch.nn as nn
 from dlk.nets.autoencoder import Autoencoder
 from dlk.nets.conv1d import ConvNet, ConvResNet
@@ -14,6 +17,8 @@ from dlk.nets.transformer1d import ChannelWiseTransformerNet, TransformerNet
 from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 from dlk.nets.unet import EncoderNet1d_2021 as EncoderConvNet
 from dlk.nets.unet import UNet1d_2021 as UNet
+from dlk.nets.utils import get_parameters
+from dlk.opt import distributed
 
 # --------------------------------------
 # Neural Network Types
@@ -263,43 +268,117 @@ def _create_transformerNet(input_channels, input_size, output_size, net_params, 
         )
 
 
-def create_network(params, logger):
-    # get network options
+def create_network(
+    params: dict,
+    device: torch.device,
+    logger: logging.Logger | None = None,
+) -> nn.Module:
+    """Build and return a neural network from a configuration dict.
+
+    Dispatches to the appropriate private factory based on
+    ``params["net"]["type"]``. Input and output sizes are taken from
+    ``params["data"]``, which is populated by ``load_data``.
+
+    Supported network types (``params["net"]["type"]``):
+
+    - ``"MLPNET"``         -- MLP (flat input)
+    - ``"MLPRESNET"``      -- residual MLP (flat input)
+    - ``"CONVNET"``        -- 1-D convolutional + MLP (time-series input)
+    - ``"CONVRESNET"``     -- residual 1-D convolutional + MLP (time-series input)
+    - ``"EFFICIENTNET"``   -- EfficientNet architecture (time-series input)
+    - ``"TRANSFORMERNET"`` -- Transformer architecture (time-series input)
+
+    Args:
+        params: Configuration dict with two required top-level keys:
+
+            - ``params["net"]``: architecture settings (type, layer sizes,
+              activation function, dropout, etc.).
+            - ``params["data"]``: data-shape metadata with entries
+
+              - ``"num_features"`` -- shape of scalar input features.
+              - ``"num_targets"`` -- shape of scalar output targets.
+
+        device: Device to copy the network to.
+        logger: Logger for progress messages. A default logger named
+            ``"create_network"`` is created when ``None``.
+
+    Returns:
+        Constructed ``nn.Module`` ready for training.
+
+    Raises:
+        ValueError: If ``params["net"]["type"]`` is not a known
+            ``NetworkType`` name.
+        NotImplementedError: If ``num_features`` has a length other than
+            1 or 2, or the requested network type has no implementation.
+    """
+    if logger is None:
+        logger = logging.getLogger("create_network")
+
+    save_dir = pathlib.Path(__file__).parent / params["runconfig"]["save_dir"]
+    enable_debug = params["runconfig"].get("debug")
+
     net_params = params["net"]
     net_type = NetworkType.get_from_name(net_params["type"])
-    logger.info(f"Network type: {net_params['type']}, key: {net_type}")
-    # set input and output sizes
-    assert 2 == len(params["data"]["num_features"])
-    input_channels, input_size = params["data"]["num_features"]
-    output_size = params["data"]["num_targets"]
-    # create network
-    if NetworkType.MLPNET == net_type:
+    num_features = params["data"]["num_features"]
+    num_targets = params["data"]["num_targets"]
+
+    logger.info(f"Network type: {net_params['type']}, {num_features=}, {num_targets=}")
+
+    # determine the input dimensions; num_features is
+    #   (n_features,) for flat input
+    #   (channels, length) for time-series
+    if 2 == len(num_features):
+        input_channels, input_length = num_features
+        flat_input_size = input_channels * input_length
+    else:
+        raise NotImplementedError(f"num_features={num_features}")
+
+    # determine the output dimensions; num_targets is
+    #   (n_targets,) for flat output
+    if 1 == len(num_targets):
+        output_size = num_targets[0]
+    else:
+        raise NotImplementedError(f"num_targets={num_targets}")
+
+    if NetworkType.MLPRESNET == net_type:
         net = _create_MLPNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     elif NetworkType.MLPRESNET == net_type:
         net = _create_MLPResNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     elif NetworkType.CONVNET == net_type:
         net = _create_convNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     elif NetworkType.CONVRESNET == net_type:
         net = _create_convResNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     elif NetworkType.EFFICIENTNET == net_type:
         net = _create_efficientNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     elif NetworkType.TRANSFORMERNET == net_type:
         net = _create_transformerNet(
-            input_channels, input_size, output_size, net_params, logger
+            input_channels, input_length, output_size, net_params, logger
         )
     else:
-        raise NotImplementedError(f"Type {net_type} is not implemented")
-    # return network
+        raise NotImplementedError(f"type {net_type} is not implemented")
+
+    # move network to device
+    net.to(device)
+
+    # log network and parameters
+    _, _, net_params_table = get_parameters(net)
+    net_out = f"<network>\n{net}\n</network>\n"
+    net_out += f"<parameters>\n{net_params_table}\n</parameters>\n"
+    if distributed.is_main_process():
+        (save_dir / "net.txt").write_text(net_out)
+        if enable_debug:
+            print(net_out)
+
     return net
 
 

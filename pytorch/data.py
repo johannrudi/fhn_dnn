@@ -404,9 +404,7 @@ def load_data(params, logger):
             params["data_evaluate"].setdefault("Ntest", features["test"].shape[0])
         elif dictarray_is_not_none(features_noise):
             params["data"]["num_features"] = list(features_noise["train"].shape[1:])
-            params["data_evaluate"].setdefault(
-                "Ntest", features_noise["test"].shape[0]
-            )
+            params["data_evaluate"].setdefault("Ntest", features_noise["test"].shape[0])
         else:
             raise NotImplementedError()
         # set reduced feature sizes
@@ -425,13 +423,14 @@ def load_data(params, logger):
 
     # set targets sizes
     if "num_targets" not in params["data"]:
-        params["data"]["num_targets"] = 0
+        num_targets = 0
         if dictarray_is_not_none(targets):
             assert dictarray_is_not_none(features)
-            params["data"]["num_targets"] += targets["train"].shape[1]
+            num_targets += targets["train"].shape[1]
         if dictarray_is_not_none(targets_noise):
             assert dictarray_is_not_none(features_noise)
-            params["data"]["num_targets"] += targets_noise["train"].shape[1]
+            num_targets += targets_noise["train"].shape[1]
+        params["data"]["num_targets"] = [num_targets]
 
     # print sample sizes
     logger.info(f"Ntrain:    {data_params['Ntrain']}")
@@ -988,9 +987,7 @@ def create_dataloader(
         "features_additive_noise_std", 0.0
     )
     features_sub_length = mode_data_params.get("features_sub_length", 0)
-    features_sub_begin_random = mode_data_params.get(
-        "features_sub_begin_random", False
-    )
+    features_sub_begin_random = mode_data_params.get("features_sub_begin_random", False)
     features_sub_begin_sequence = mode_data_params.get("features_sub_begin_sequence")
     features_sub_step = mode_data_params.get("features_sub_step")
     item_return_order = params["dataloader"]["item_return_order"]
