@@ -205,19 +205,19 @@ def load_and_preprocess_data(
     )
 
 
-def find_latest_checkpoint(checkpoint_root: pathlib.Path) -> pathlib.Path:
-    """Return the newest ``*.pt`` under ``checkpoint_root/checkpoints/*``.
+def find_all_checkpoints(checkpoint_root: pathlib.Path) -> list[pathlib.Path]:
+    """Return every ``*.pt`` under ``checkpoint_root/checkpoints/<latest>``.
 
-    Picks the most recently modified timestamp subfolder, then the most
-    recently modified ``.pt`` file inside it (mtime), matching the
-    autoencoder discovery pattern in ``run_dnn.py``.
+    Picks the most recently modified timestamp subfolder under
+    ``checkpoints/``, then returns all ``.pt`` files inside it sorted by
+    mtime ascending (oldest / lowest-epoch first).
 
     Args:
         checkpoint_root: Run directory that contains a ``checkpoints/``
             subfolder (usually ``self_dir / runconfig.save_dir``).
 
     Returns:
-        Path to the selected checkpoint file.
+        Checkpoint paths sorted by ``st_mtime`` ascending. Never empty.
 
     Raises:
         FileNotFoundError: If no checkpoint folder or ``.pt`` file exists.
@@ -244,4 +244,23 @@ def find_latest_checkpoint(checkpoint_root: pathlib.Path) -> pathlib.Path:
             "Run train.py first, or set runconfig.load_checkpoint to a .pt file."
         )
 
-    return max(checkpoint_files, key=lambda p: p.stat().st_mtime)
+    return sorted(checkpoint_files, key=lambda p: p.stat().st_mtime)
+
+
+def find_latest_checkpoint(checkpoint_root: pathlib.Path) -> pathlib.Path:
+    """Return the newest ``*.pt`` under ``checkpoint_root/checkpoints/*``.
+
+    Thin wrapper around ``find_all_checkpoints``: returns the last entry
+    (highest mtime) of that list.
+
+    Args:
+        checkpoint_root: Run directory that contains a ``checkpoints/``
+            subfolder (usually ``self_dir / runconfig.save_dir``).
+
+    Returns:
+        Path to the selected checkpoint file.
+
+    Raises:
+        FileNotFoundError: If no checkpoint folder or ``.pt`` file exists.
+    """
+    return find_all_checkpoints(checkpoint_root)[-1]

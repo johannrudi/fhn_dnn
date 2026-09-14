@@ -13,7 +13,7 @@ import pathlib
 import sys
 import timeit
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Sized, cast
 
 import common
 import matplotlib.pyplot as plt
@@ -25,14 +25,17 @@ from dlk.mgmt.log import logging_get_logger
 from dlk.mode import Mode, get_mode_from_name
 from dlk.opt.utils import checkpoint_load
 from nets import create_network
-from plot_utils import plot_data_vs_predict, plot_data_vs_predict_error
+from plot_utils import (
+    plot_data_vs_predict,
+    plot_data_vs_predict_error,
+    plot_metrics_vs_checkpoint,
+)
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from data import (
     create_dataloader,
     dictarray_is_not_none,
-    postprocess_targets,
 )
 
 
@@ -43,8 +46,16 @@ def run_evaluate(
 ) -> None:
     """Run prediction and optional evaluation for a DNN inverse map.
 
-    Loads a checkpoint from ``runconfig.load_checkpoint`` when set; otherwise
-    auto-discovers the latest ``*.pt`` under ``runconfig.save_dir/checkpoints``.
+    Two independent passes share one network and the same low-level helpers:
+
+    - ``train``/``validate``: every checkpoint under ``runconfig.save_dir``
+      via ``common.find_all_checkpoints``; plots go under
+      ``save_dir/checkpoints_eval/<stem>/``; metrics-vs-checkpoint plots
+      are written when ``Mode.EVAL`` is set.
+    - ``test``: one checkpoint (``runconfig.load_checkpoint`` when set,
+      else ``common.find_latest_checkpoint``); plots stay at flat
+      ``save_dir``.
+
     Builds its own device/logger via ``common.initialize_run`` when either is
     omitted.
 
@@ -99,10 +110,9 @@ def run_evaluate(
         train_input_transform_fn,
     ) = common.load_and_preprocess_data(params, device, logger)
 
-    # create dataloaders per split
-    eval_dataloader: dict[str, DataLoader] = dict()
-    for key in features.keys():
-        eval_dataloader[key] = create_dataloader(
+    # create train/validate and test dataloaders separately
+    train_validate_dataloader: dict[str, DataLoader] = {
+        key: create_dataloader(
             params,
             logging_get_logger("create_dataloader"),
             Mode.EVAL,
@@ -112,32 +122,199 @@ def run_evaluate(
             targets_noise=targets_noise[key],
             features_transform_fn=features_transform_fn,
         )
+        for key in ("train", "validate")
+    }
+    test_dataloader: dict[str, DataLoader] = {
+        "test": create_dataloader(
+            params,
+            logging_get_logger("create_dataloader"),
+            Mode.EVAL,
+            features=features["test"],
+            targets=targets["test"],
+            features_noise=features_noise["test"],
+            targets_noise=targets_noise["test"],
+            features_transform_fn=features_transform_fn,
+        )
+    }
 
     # </data>
 
     # <network>
 
-    # create network
+    # create network once; weights are reloaded per checkpoint below
     net = create_network(params, device, logging_get_logger("create_network"))
-
-    # resolve checkpoint path
-    load_checkpoint = params["runconfig"].get("load_checkpoint")
-    if load_checkpoint:
-        checkpoint_path = self_dir / load_checkpoint
-    else:
-        checkpoint_path = common.find_latest_checkpoint(
-            self_dir / params["runconfig"]["save_dir"]
-        )
-
-    epoch = checkpoint_load(checkpoint_path, net, map_location=device)
-    logger.info(f"Evaluate at checkpoint: {checkpoint_path} (epoch {epoch})")
 
     # </network>
 
-    # <predict>
+    save_dir = self_dir / params["runconfig"]["save_dir"]
+    show_plots = params["runconfig"].get("show_plots", False)
 
-    print("<predict>")
+    # <evaluate_train_validate>
 
+    checkpoints = common.find_all_checkpoints(save_dir)
+    metrics_by_epoch: dict[str, dict[str, list]] = {
+        "train": {"epoch": [], "mse": [], "mae": [], "r2": []},
+        "validate": {"epoch": [], "mse": [], "mae": [], "r2": []},
+    }
+    n_samples_train_validate = sum(
+        len(cast(Sized, dl.dataset)) for dl in train_validate_dataloader.values()
+    )
+
+    for checkpoint_path in checkpoints:
+        epoch = checkpoint_load(checkpoint_path, net, map_location=device)
+
+        print(f"<evaluate_train_validate checkpoint={checkpoint_path}>")
+        logger.info(
+            f"Evaluate checkpoint {checkpoint_path} (epoch {epoch}) for train/validate"
+        )
+        tag = f" [{checkpoint_path.stem}]"
+
+        eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
+            net,
+            train_validate_dataloader,
+            device,
+            targets,
+            targets_noise,
+            targets_scale,
+            targets_noise_scale,
+            train_input_transform_fn,
+        )
+        _log_runtime(logger, time_eval, n_samples_train_validate, tag=tag)
+        split_metrics = _log_eval_metrics(
+            eval_targets_data, eval_targets_pred, mode, logger, tag=tag
+        )
+        if split_metrics is not None:
+            for key in ("train", "validate"):
+                metrics_by_epoch[key]["epoch"].append(epoch)
+                metrics_by_epoch[key]["mse"].append(split_metrics[key]["mse"])
+                metrics_by_epoch[key]["mae"].append(split_metrics[key]["mae"])
+                metrics_by_epoch[key]["r2"].append(split_metrics[key]["r2"])
+        _plot_predictions(
+            eval_targets_data,
+            eval_targets_pred,
+            params,
+            save_dir / "checkpoints_eval" / checkpoint_path.stem,
+            close_plot=not show_plots,
+        )
+
+        print(f"</evaluate_train_validate>")
+
+    # aggregate MSE/MAE/R2 vs checkpoint epoch (train + validate on one figure)
+    # NOTE: Do not plot the first entry, which is epoch=0 with high errors.
+    if Mode.EVAL in mode and checkpoints:
+        plot_metrics_vs_checkpoint(
+            metrics_by_epoch["train"]["epoch"][1:],
+            metrics_by_epoch["train"]["mse"][1:],
+            metrics_by_epoch["train"]["mae"][1:],
+            metrics_by_epoch["train"]["r2"][1:],
+            metrics_by_epoch["validate"]["mse"][1:],
+            metrics_by_epoch["validate"]["mae"][1:],
+            metrics_by_epoch["validate"]["r2"][1:],
+            save_dir / "metrics_vs_checkpoint",
+            close_plot=not show_plots,
+        )
+
+    # </evaluate_train_validate>
+
+    # <evaluate_test>
+
+    # resolve checkpoint path (unchanged from single-checkpoint flow)
+    load_checkpoint = params["runconfig"].get("load_checkpoint")
+    if load_checkpoint:
+        test_checkpoint_path = self_dir / load_checkpoint
+        epoch = checkpoint_load(test_checkpoint_path, net, map_location=device)
+    else:
+        test_checkpoint_path = common.find_latest_checkpoint(save_dir)
+        assert test_checkpoint_path == checkpoint_path
+
+    print(f"<evaluate_test checkpoint={test_checkpoint_path}>")
+    logger.info(
+        f"Evaluate at checkpoint: {test_checkpoint_path} (epoch {epoch}) for test"
+    )
+
+    eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
+        net,
+        test_dataloader,
+        device,
+        targets,
+        targets_noise,
+        targets_scale,
+        targets_noise_scale,
+        train_input_transform_fn,
+    )
+    _log_runtime(
+        logger, time_eval, len(cast(Sized, test_dataloader["test"].dataset)), tag=""
+    )
+    _log_eval_metrics(eval_targets_data, eval_targets_pred, mode, logger, tag="")
+    _plot_predictions(
+        eval_targets_data,
+        eval_targets_pred,
+        params,
+        save_dir,
+        close_plot=not show_plots,
+    )
+
+    print(f"</evaluate_test checkpoint>")
+
+    # </evaluate_test>
+
+    # <output>
+
+    # show plots
+    if show_plots:
+        plt.show()
+    else:
+        plt.close("all")
+
+    # </output>
+
+    print(f"</{self_tag}>")
+
+
+def _undo_targets_scale(
+    eval_dict: dict[str, np.ndarray],
+    scale: dict[str, np.ndarray],
+) -> None:
+    """Apply inverse target scale to whatever splits are present in ``eval_dict``.
+
+    Mirrors ``data._apply_scale_inverse`` but does not require the full
+    train/validate/test key set that ``postprocess_targets`` demands via
+    ``dictarray_is_none``.
+
+    Args:
+        eval_dict: Split name to array mapping; updated in place.
+        scale: Dict with ``shift`` and ``mult`` arrays broadcast over samples.
+    """
+    for key in eval_dict.keys():
+        eval_dict[key] = eval_dict[key] * scale["mult"] + scale["shift"]
+
+
+def _predict_and_postprocess(
+    net: torch.nn.Module,
+    eval_dataloader: dict[str, DataLoader],
+    device: torch.device,
+    targets: Any,
+    targets_noise: Any,
+    targets_scale: Any,
+    targets_noise_scale: Any,
+    train_input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], float]:
+    """Predict on ``eval_dataloader`` and undo target scaling.
+
+    Args:
+        net: Network whose weights are already loaded for this pass.
+        eval_dataloader: Split name to dataloader mapping for this pass.
+        device: Device for the forward pass.
+        targets: Full targets dict (used only for scale-selection branching).
+        targets_noise: Full noise-targets dict (scale-selection branching).
+        targets_scale: Shift/mult scale for ODE targets, or None.
+        targets_noise_scale: Shift/mult scale for noise targets, or None.
+        train_input_transform_fn: Optional input transform passed to ``predict``.
+
+    Returns:
+        ``(eval_targets_pred, eval_targets_data, time_eval)`` where
+        ``time_eval`` is the wall-clock seconds spent in ``predict``.
+    """
     # compute predictions
     time_eval = timeit.default_timer()
     eval_targets_pred, eval_targets_data = predict(
@@ -148,7 +325,8 @@ def run_evaluate(
     )
     time_eval = timeit.default_timer() - time_eval
 
-    # postprocess evaluation data
+    # postprocess evaluation data (scale inverse on present splits only;
+    # postprocess_targets requires train/validate/test keys via dictarray_is_none)
     if dictarray_is_not_none(targets) and dictarray_is_not_none(targets_noise):
         assert targets_scale is not None
         assert targets_noise_scale is not None
@@ -157,52 +335,107 @@ def run_evaluate(
             eval_targets_scale[key] = np.concatenate(
                 (targets_scale[key], targets_noise_scale[key]), axis=1
             )
-        postprocess_targets(eval_targets_data, eval_targets_scale)
-        postprocess_targets(eval_targets_pred, eval_targets_scale)
+        _undo_targets_scale(eval_targets_data, eval_targets_scale)
+        _undo_targets_scale(eval_targets_pred, eval_targets_scale)
     elif dictarray_is_not_none(targets):
-        postprocess_targets(eval_targets_data, targets_scale)
-        postprocess_targets(eval_targets_pred, targets_scale)
+        _undo_targets_scale(eval_targets_data, targets_scale)
+        _undo_targets_scale(eval_targets_pred, targets_scale)
     elif dictarray_is_not_none(targets_noise):
-        postprocess_targets(eval_targets_data, targets_noise_scale)
-        postprocess_targets(eval_targets_pred, targets_noise_scale)
+        _undo_targets_scale(eval_targets_data, targets_noise_scale)
+        _undo_targets_scale(eval_targets_pred, targets_noise_scale)
     else:
         raise NotImplementedError()
 
-    print("</predict>")
+    return eval_targets_pred, eval_targets_data, time_eval
 
-    # </predict>
 
-    if Mode.EVAL in mode:
-        print("<evaluate>")
+def _log_eval_metrics(
+    eval_targets_data: dict[str, np.ndarray],
+    eval_targets_pred: dict[str, np.ndarray],
+    mode: Mode,
+    logger: logging.Logger,
+    tag: str = "",
+) -> dict[str, dict[str, float]] | None:
+    """Log MSE/MAE/R2 per split when ``Mode.EVAL`` is set.
 
-        # compute evaluation metrics
-        eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(
-            eval_targets_data, eval_targets_pred
+    Args:
+        eval_targets_data: Ground-truth arrays keyed by split.
+        eval_targets_pred: Predicted arrays keyed by split.
+        mode: Current run mode; metrics run only when ``Mode.EVAL in mode``.
+        logger: Logger for the metric lines.
+        tag: Optional suffix after the split name (e.g. ``" [net_e0040]"``).
+            Empty string keeps the untagged ``test``-path format.
+
+    Returns:
+        ``None`` when ``Mode.EVAL`` is not in ``mode``; otherwise
+        ``{split: {"mse", "mae", "r2"}}`` overall scalars per split key.
+    """
+    if Mode.EVAL not in mode:
+        return None
+
+    # compute evaluation metrics
+    eval_mse, eval_mae, eval_r2 = eval_data_vs_pred(
+        eval_targets_data, eval_targets_pred
+    )
+    split_metrics: dict[str, dict[str, float]] = {}
+    for key in eval_targets_data.keys():
+        logger.info(
+            f"MSE ({key}){tag}:      " + str(eval_mse[key + "_i"]) + f" {eval_mse[key]}"
         )
-        for key in eval_targets_data.keys():
-            logger.info(
-                f"MSE ({key}):      " + str(eval_mse[key + "_i"]) + f" {eval_mse[key]}"
-            )
-            logger.info(
-                f"MAE ({key}):      " + str(eval_mae[key + "_i"]) + f" {eval_mae[key]}"
-            )
-            logger.info(
-                f"R2 score ({key}): " + str(eval_r2[key + "_i"]) + f" {eval_r2[key]}"
-            )
+        logger.info(
+            f"MAE ({key}){tag}:      " + str(eval_mae[key + "_i"]) + f" {eval_mae[key]}"
+        )
+        logger.info(
+            f"R2 score ({key}){tag}: " + str(eval_r2[key + "_i"]) + f" {eval_r2[key]}"
+        )
+        split_metrics[key] = {
+            "mse": eval_mse[key],
+            "mae": eval_mae[key],
+            "r2": eval_r2[key],
+        }
 
-        print("</evaluate>")
+    return split_metrics
 
-    # </evaluate>
 
-    # <output>
+def _log_runtime(
+    logger: logging.Logger,
+    time_eval: float,
+    n_samples: int,
+    tag: str = "",
+) -> None:
+    """Log wall-clock runtime and samples/sec for one predict pass.
 
-    # log eval runtimes
-    logger.info(f"Runtime [sec]:                         {time_eval}")
-    n_samples = (
-        params["data_evaluate"]["Ntest"] // params["data_evaluate"]["eval_batch_size"]
-    ) * params["data_evaluate"]["eval_batch_size"]
-    logger.info(f"Runtime statistics - #samples:         {n_samples}")
-    logger.info(f"Runtime statistics - avg. samples/sec: {n_samples / time_eval}")
+    Args:
+        logger: Logger for the runtime lines.
+        time_eval: Seconds spent in ``predict`` for this pass.
+        n_samples: True sample count (``len(dataset)`` summed over splits).
+        tag: Optional suffix after ``Runtime`` (e.g. ``" [net_e0040]"``).
+            Empty string keeps the untagged ``test``-path format.
+    """
+    logger.info(f"Runtime{tag} [sec]:                         {time_eval}")
+    logger.info(f"Runtime statistics{tag} - #samples:         {n_samples}")
+    logger.info(f"Runtime statistics{tag} - avg. samples/sec: {n_samples / time_eval}")
+
+
+def _plot_predictions(
+    eval_targets_data: dict[str, np.ndarray],
+    eval_targets_pred: dict[str, np.ndarray],
+    params: dict[str, Any],
+    output_dir: pathlib.Path,
+    close_plot: bool = True,
+) -> None:
+    """Write data-vs-predict and error plots for each split in ``output_dir``.
+
+    Args:
+        eval_targets_data: Ground-truth arrays keyed by split.
+        eval_targets_pred: Predicted arrays keyed by split.
+        params: Full config; used to skip splits with ``N* <= 0``.
+        output_dir: Directory that receives ``data_vs_predict_<key>`` and
+            ``predict_error_<key>`` plot stems. Created if missing.
+        close_plot: Forwarded to plot helpers; True closes each figure after
+            save (batch runs), False keeps figures open for ``plt.show()``.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # plot predictions
     for key in eval_targets_data.keys():
@@ -220,7 +453,7 @@ def run_evaluate(
         plot_targets_pred = [eval_targets_pred[key][:, i] for i in range(ntrg)]
         plot_name = [f"param_{i}" for i in range(ntrg)]
         # plot true values vs. predictions
-        path = self_dir / params["runconfig"]["save_dir"] / f"data_vs_predict_{key}"
+        path = output_dir / f"data_vs_predict_{key}"
         plot_data_vs_predict(
             plot_targets_data,
             plot_targets_pred,
@@ -228,9 +461,10 @@ def run_evaluate(
             plot_name=plot_name,
             x_label=ntrg * [f"{key} value"],
             y_label=ntrg * ["predicted value"],
+            close_plot=close_plot,
         )
         # plot prediction errors
-        path = self_dir / params["runconfig"]["save_dir"] / f"predict_error_{key}"
+        path = output_dir / f"predict_error_{key}"
         plot_data_vs_predict_error(
             plot_targets_data,
             plot_targets_pred,
@@ -238,17 +472,8 @@ def run_evaluate(
             plot_name=plot_name,
             x_label=ntrg * [f"{key} value"],
             y_label=ntrg * ["prediction error"],
+            close_plot=close_plot,
         )
-    if not params["runconfig"]["show_plots"]:
-        plt.close()
-
-    # show plots
-    if params["runconfig"]["show_plots"]:
-        plt.show()
-
-    # <output>
-
-    print(f"</{self_tag}>")
 
 
 def predict(

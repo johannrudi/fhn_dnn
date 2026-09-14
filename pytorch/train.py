@@ -178,6 +178,8 @@ def run_train(
 
     # <output>
 
+    show_plots = params["runconfig"].get("show_plots", False)
+
     # log training runtimes and plot loss (skip for profile-only runs)
     if train_dlog is not None:
         logger.info(f"Runtime [sec]:                         {time_train}")
@@ -203,9 +205,14 @@ def run_train(
             loss_std=train_dlog["loss_std"],
             x_offset=1,
             y_scale="log",
+            close_plot=not show_plots,
         )
-        if not params["runconfig"]["show_plots"]:
-            plt.close()
+
+    # show plots
+    if show_plots:
+        plt.show()
+    else:
+        plt.close("all")
 
     # </output>
 

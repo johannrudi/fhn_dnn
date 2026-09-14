@@ -1046,7 +1046,7 @@ def create_dataloader(
                 "pin_memory": True,  # faster CPU->GPU transfer
                 "prefetch_factor": 2,  # batches to prefetch per worker
                 "persistent_workers": True,  # keep workers alive between epochs
-                "multiprocessing_context": "fork",  # (or 'spawn' on Windows)
+                "multiprocessing_context": "spawn",  # how to create workers (fork/spawn)
             }
         )
     else:  # otherwise CPU-only setup
@@ -1059,7 +1059,7 @@ def create_dataloader(
                 "num_workers": n_workers,
                 "prefetch_factor": 2,
                 "persistent_workers": True,
-                "multiprocessing_context": "fork",
+                "multiprocessing_context": "spawn",
             }
         )
 

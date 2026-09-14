@@ -29,9 +29,9 @@ uv run python run_dnn.py --params configs/params_m16.yaml \
 
 **Entry points:**
 - `train.py` — training only (`train`, `train_profile`); writes checkpoints under `save_dir`.
-- `evaluate.py` — predict/eval from `runconfig.load_checkpoint`, or auto-discovers the latest checkpoint under `save_dir`.
+- `evaluate.py` — evaluates `train`/`validate` at every checkpoint under `save_dir`; evaluates `test` at one checkpoint (`runconfig.load_checkpoint` when set, else the latest under `save_dir`).
 - `run.py` — chains `train.run_train` then `evaluate.run_evaluate` (default `train_eval`); one shared log-file set.
-- `common.py` — shared setup: `initialize_run`, `load_and_preprocess_data`, `find_latest_checkpoint`.
+- `common.py` — shared setup: `initialize_run`, `load_and_preprocess_data`, `find_all_checkpoints`, `find_latest_checkpoint`.
 - `run_dnn.py` — legacy monolithic entry point (same pipeline in one script).
 
 **`data.py`** — loads numpy/memmap arrays, splits into train/validate/test, normalizes, optionally applies FFT or routes through a pre-trained autoencoder encoder. Feature types: `TIME`, `TIME_NOISE`, `ODE_STATS`/`RATE_DURATION`, `NOISE`. Target types: `ODE`, `ODE_NOISE`, `NOISE`.
@@ -40,7 +40,7 @@ uv run python run_dnn.py --params configs/params_m16.yaml \
 
 **`opt_utils.py`** — creates Adam/AdamW optimizer and optional linear-then-cosine LR scheduler.
 
-**`plot_utils.py`** — training loss curves, scatter plots (truth vs. prediction), and error plots.
+**`plot_utils.py`** — training loss curves, scatter plots (truth vs. prediction), error plots, and metrics-vs-checkpoint curves.
 
 ## Configuration
 
@@ -63,5 +63,8 @@ All outputs go to `runs/dnn/` (or the configured `save_dir`):
 - `net.txt` — architecture summary and parameter counts
 - `checkpoints/` — model weights saved every N epochs
 - `loss.txt` / `loss.pdf` — training loss curve
-- `data_vs_predict_{train,validate,test}.pdf` — scatter plots
-- `predict_error_{train,validate,test}.pdf` — error analysis
+- `checkpoints_eval/<checkpoint stem>/data_vs_predict_{train,validate}.pdf` — per-checkpoint scatter plots
+- `checkpoints_eval/<checkpoint stem>/predict_error_{train,validate}.pdf` — per-checkpoint error analysis
+- `metrics_vs_checkpoint.pdf` — overall MSE/MAE/R2 vs checkpoint epoch (train + validate)
+- `data_vs_predict_test.pdf` — test scatter plot (single checkpoint)
+- `predict_error_test.pdf` — test error analysis (single checkpoint)
