@@ -17,11 +17,7 @@ make testvv           # extra verbose (pytest -sv)
 uv run python train.py --params configs/params_dnn.yaml
 uv run python evaluate.py --params configs/params_dnn.yaml
 uv run python run.py --params configs/params_dnn.yaml          # train then evaluate
-
-# Legacy combined entry point
-uv run python run_dnn.py                                    # default config
-uv run python run_dnn.py --params configs/params_dnn_2025.yaml
-uv run python run_dnn.py --params configs/params_m16.yaml \
+uv run python run.py --params configs/params_dnn.yaml \
     --json_params '{"data_train": {"Ntrain": 1024}}'  # inline overrides
 ```
 
@@ -31,14 +27,11 @@ uv run python run_dnn.py --params configs/params_m16.yaml \
 - `train.py` — training only (`train`, `train_profile`); writes checkpoints under `save_dir`.
 - `evaluate.py` — evaluates `train`/`validate` at every checkpoint under `save_dir`; evaluates `test` at one checkpoint (`runconfig.load_checkpoint` when set, else the latest under `save_dir`).
 - `run.py` — chains `train.run_train` then `evaluate.run_evaluate` (default `train_eval`); one shared log-file set.
-- `common.py` — shared setup: `initialize_run`, `load_and_preprocess_data`, `find_all_checkpoints`, `find_latest_checkpoint`.
-- `run_dnn.py` — legacy monolithic entry point (same pipeline in one script).
+- `common.py` — shared setup: `initialize_run`, `load_and_preprocess_data`, `find_all_checkpoints(pattern="*.pt")`, `find_latest_checkpoint(pattern="*.pt")`.
 
 **`data.py`** — loads numpy/memmap arrays, splits into train/validate/test, normalizes, optionally applies FFT or routes through a pre-trained autoencoder encoder. Feature types: `TIME`, `TIME_NOISE`, `ODE_STATS`/`RATE_DURATION`, `NOISE`. Target types: `ODE`, `ODE_NOISE`, `NOISE`.
 
 **`nets.py`** — factory (`create_network`, `create_ae`) for six architectures: `MLPNet`, `MLPResNet`, `ConvNet`, `ConvResNet`, `EfficientNet`, `TransformerNet`. The ResNet variants support residual blocks and optional attention. Convolutional architectures are 1D (time-series input).
-
-**`opt_utils.py`** — creates Adam/AdamW optimizer and optional linear-then-cosine LR scheduler.
 
 **`plot_utils.py`** — training loss curves, scatter plots (truth vs. prediction), error plots, and metrics-vs-checkpoint curves.
 
@@ -52,9 +45,9 @@ All configs are YAML in `configs/`. The key sections are:
 - `net` — network type and architecture hyperparameters
 - `optimizer` — type, learning rate, betas, weight decay, optional LR scheduler
 - `training` — number of epochs
-- `runconfig` — save dir, optional `load_checkpoint` (.pt path), checkpoint frequency, debug flag
+- `runconfig` — save dir, optional `load_checkpoint`, checkpoint frequency, debug flag
 
-`params_dnn_2025.yaml` is the current default. The `params_m*.yaml` files are scalability study variants (varying network width M=4/16/64/256/1024).
+`params_dnn_2025.yaml` is the current DNN default. The `params_m*.yaml` files are scalability study variants (varying network width M=4/16/64/256/1024).
 
 ## Outputs
 

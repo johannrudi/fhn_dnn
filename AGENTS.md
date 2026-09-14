@@ -86,7 +86,7 @@ python run_dnn.py
   - `ConvNet` - 1D convolutional network
   - `EfficientNet` - EfficientNet-1D
   - `TransformerNet` - Transformer-based architecture
-- Also includes autoencoder (`Autoencoder`), U-Net, and GAN components
+- Also includes autoencoder (`Autoencoder`) and U-Net components
 
 **pytorch/run_dnn.py**
 - Legacy monolithic training/evaluation script

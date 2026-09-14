@@ -205,22 +205,26 @@ def load_and_preprocess_data(
     )
 
 
-def find_all_checkpoints(checkpoint_root: pathlib.Path) -> list[pathlib.Path]:
-    """Return every ``*.pt`` under ``checkpoint_root/checkpoints/<latest>``.
+def find_all_checkpoints(
+    checkpoint_root: pathlib.Path, pattern: str = "*.pt"
+) -> list[pathlib.Path]:
+    """Return matching checkpoints under ``checkpoint_root/checkpoints/<latest>``.
 
     Picks the most recently modified timestamp subfolder under
-    ``checkpoints/``, then returns all ``.pt`` files inside it sorted by
-    mtime ascending (oldest / lowest-epoch first).
+    ``checkpoints/``, then returns files matching ``pattern`` inside it
+    sorted by mtime ascending (oldest / lowest-epoch first).
 
     Args:
         checkpoint_root: Run directory that contains a ``checkpoints/``
             subfolder (usually ``self_dir / runconfig.save_dir``).
+        pattern: Glob relative to the latest timestamp folder. Default
+            ``"*.pt"``.
 
     Returns:
         Checkpoint paths sorted by ``st_mtime`` ascending. Never empty.
 
     Raises:
-        FileNotFoundError: If no checkpoint folder or ``.pt`` file exists.
+        FileNotFoundError: If no checkpoint folder or matching file exists.
     """
     checkpoints_dir = checkpoint_root / "checkpoints"
     if not checkpoints_dir.is_dir():
@@ -237,30 +241,35 @@ def find_all_checkpoints(checkpoint_root: pathlib.Path) -> list[pathlib.Path]:
         )
 
     latest_folder = max(checkpoint_folders, key=lambda p: p.stat().st_mtime)
-    checkpoint_files = list(latest_folder.glob("*.pt"))
+    checkpoint_files = list(latest_folder.glob(pattern))
     if not checkpoint_files:
         raise FileNotFoundError(
-            f"No .pt checkpoint files found under {latest_folder}. "
+            f"No checkpoint files matching {pattern!r} found under {latest_folder}. "
             "Run train.py first, or set runconfig.load_checkpoint to a .pt file."
         )
 
     return sorted(checkpoint_files, key=lambda p: p.stat().st_mtime)
 
 
-def find_latest_checkpoint(checkpoint_root: pathlib.Path) -> pathlib.Path:
-    """Return the newest ``*.pt`` under ``checkpoint_root/checkpoints/*``.
+def find_latest_checkpoint(
+    checkpoint_root: pathlib.Path, pattern: str = "*.pt"
+) -> pathlib.Path:
+    """Return the newest matching checkpoint under ``checkpoint_root``.
 
     Thin wrapper around ``find_all_checkpoints``: returns the last entry
-    (highest mtime) of that list.
+    (highest mtime) of that list. Within one stream selected by
+    ``pattern``, that is the highest-epoch file.
 
     Args:
         checkpoint_root: Run directory that contains a ``checkpoints/``
             subfolder (usually ``self_dir / runconfig.save_dir``).
+        pattern: Glob forwarded to ``find_all_checkpoints``. Default
+            ``"*.pt"``.
 
     Returns:
         Path to the selected checkpoint file.
 
     Raises:
-        FileNotFoundError: If no checkpoint folder or ``.pt`` file exists.
+        FileNotFoundError: If no checkpoint folder or matching file exists.
     """
-    return find_all_checkpoints(checkpoint_root)[-1]
+    return find_all_checkpoints(checkpoint_root, pattern=pattern)[-1]
