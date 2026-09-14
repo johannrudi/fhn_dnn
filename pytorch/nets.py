@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from dlk.nets.autoencoder import Autoencoder
 from dlk.nets.conv1d import ConvNet, ConvResNet
-from dlk.nets.efficientnet1d import EfficientNetV1B0Minimal
+from dlk.nets.efficientnet1d import EfficientNetV2B0Minimal
 from dlk.nets.mlp import MLPNet, MLPNet_MultIn, MLPResNet
 from dlk.nets.transformer1d import ChannelWiseTransformerNet, TransformerNet
 from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
@@ -229,7 +229,7 @@ def _create_efficientNet(input_channels, input_size, output_size, net_params, lo
         f"create EfficientNet1D({input_channels}, {input_size}, {output_size}, ...)"
     )
 
-    return EfficientNetV1B0Minimal(
+    return EfficientNetV2B0Minimal(
         input_channels=input_channels,
         input_length=input_size,
         num_classes=output_size,
