@@ -2,6 +2,7 @@
 Create neural networks.
 """
 
+import copy
 import enum
 import logging
 import math
@@ -85,22 +86,21 @@ def _create_MLPResNet(
 ):
     activation_fn = _get_activation(net_params["activation_fn"])
     embed_size = net_params.get("embedding_size", 1)
+    # deep-copy so latent/target injection never mutates params in place
+    residual_blocks_sizes = copy.deepcopy(net_params["residual_blocks_sizes"])
     flattened_input_size = (
         input_channels * input_size,
-        net_params["residual_blocks_sizes"][0][0],
+        residual_blocks_sizes[0][0],
     )
     # configure hidden inputs to residual blocks
     if hidden_input_size:
-        residual_blocks_sizes = list(net_params["residual_blocks_sizes"])
         if isinstance(hidden_input_size, int):
             hidden_input_size = [hidden_input_size] * len(residual_blocks_sizes)
         assert len(hidden_input_size) == len(residual_blocks_sizes)
         for i in range(len(residual_blocks_sizes)):
             residual_blocks_sizes[i][0] += hidden_input_size[i]
-    else:
-        residual_blocks_sizes = net_params["residual_blocks_sizes"]
     # create net
-    logger.info(f"create MLPNet_MultIn({flattened_input_size}, {output_size}, ...)")
+    logger.info(f"create MLPResNet({flattened_input_size}, {output_size}, ...)")
     return MLPResNet(
         flattened_input_size,
         output_size,
@@ -108,7 +108,7 @@ def _create_MLPResNet(
         attention_blocks_n_heads=net_params.get("attention_layers_n_heads"),
         attention_blocks_activation_size=embed_size * 4,
         attention_blocks_activation=activation_fn,
-        residual_blocks_sizes=net_params["residual_blocks_sizes"],
+        residual_blocks_sizes=residual_blocks_sizes,
         residual_blocks_activation=activation_fn,
         use_dropout=net_params.get("dropout", False),
         output_layer_activation=None,
@@ -189,13 +189,14 @@ def _create_convResNet(
     n_features = input_size
     for _ in range(n_conv_layers):
         n_features = _get_conv1d_size(n_features, kernel, stride, padding)
+    # deep-copy so latent/target injection never mutates params in place
+    residual_blocks_sizes = copy.deepcopy(net_params["residual_blocks_sizes"])
     flattened_input_size = (
         n_channels * n_features,
-        net_params["residual_blocks_sizes"][0][0],
+        residual_blocks_sizes[0][0],
     )
     # configure hidden inputs to residual blocks
     if mlp_block_hidden_input_size:
-        residual_blocks_sizes = list(net_params["residual_blocks_sizes"])
         if isinstance(mlp_block_hidden_input_size, int):
             mlp_block_hidden_input_size = [mlp_block_hidden_input_size] * len(
                 residual_blocks_sizes
@@ -203,8 +204,6 @@ def _create_convResNet(
         assert len(mlp_block_hidden_input_size) == len(residual_blocks_sizes)
         for i in range(len(residual_blocks_sizes)):
             residual_blocks_sizes[i][0] += mlp_block_hidden_input_size[i]
-    else:
-        residual_blocks_sizes = net_params["residual_blocks_sizes"]
     # set parameters of MLP block
     mlp_resnet_params = {
         "input_size": flattened_input_size,
@@ -329,7 +328,7 @@ def create_network(
     #   (channels, length) for time-series
     if 2 == len(num_features):
         input_channels, input_length = num_features
-        flat_input_size = input_channels * input_length
+        # flat_input_size = input_channels * input_length
     else:
         raise NotImplementedError(f"num_features={num_features}")
 
