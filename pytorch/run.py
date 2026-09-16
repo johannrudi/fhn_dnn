@@ -46,10 +46,13 @@ def main() -> None:
     config_params.save(params, save_dir=params["runconfig"]["save_dir"])
 
     # set one device/logger pair for the whole process
-    self_dir = pathlib.Path(__file__).parent
-    device, _ = common.initialize_run(self_dir, pathlib.Path(__file__).stem, params)
+    device, _ = common.initialize_run(
+        pathlib.Path(__file__).parent,
+        pathlib.Path(__file__).stem,
+        params,
+    )
 
-    # set mode
+    # get mode
     mode = get_mode_from_name(params["runconfig"]["mode"])
     assert mode is not None
 

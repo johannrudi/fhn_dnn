@@ -41,8 +41,8 @@ from data import (
 
 def run_evaluate(
     params: dict[str, Any],
-    device: torch.device | None = None,
-    logger: logging.Logger | None = None,
+    device: torch.device,
+    logger: logging.Logger,
 ) -> None:
     """Run prediction and optional evaluation for a DNN inverse map.
 
@@ -62,8 +62,8 @@ def run_evaluate(
     Args:
         params: Already-loaded configuration dict. Requires
             ``Mode.PREDICT`` or ``Mode.EVAL`` in ``params["runconfig"]["mode"]``.
-        device: Optional pre-built torch device from ``common.initialize_run``.
-        logger: Optional pre-built logger from ``common.initialize_run``.
+        device: Torch device from ``common.initialize_run``.
+        logger: Logger from ``common.initialize_run``.
 
     Raises:
         ValueError: If mode has neither ``PREDICT`` nor ``EVAL``.
@@ -75,27 +75,14 @@ def run_evaluate(
 
     print(f"<{self_tag}>")
 
-    # <init>
-
-    # set mode
-    mode_name = params["runconfig"]["mode"]
-    mode = get_mode_from_name(mode_name)
+    # get mode
+    mode = get_mode_from_name(params["runconfig"]["mode"])
+    logger.info(f"Mode: {mode}")
     assert mode is not None
     if not mode.any(Mode.PREDICT | Mode.EVAL):
         raise ValueError(
-            f"run_evaluate requires Mode.PREDICT or Mode.EVAL in mode, "
-            f"got {mode} (--mode {mode_name})"
+            f"run_evaluate requires Mode.PREDICT or Mode.EVAL in mode, got {mode}"
         )
-
-    # set device/logger pair
-    if device is None or logger is None:
-        device, logger = common.initialize_run(self_dir, path_file.stem, params)
-    assert device is not None
-    assert logger is not None
-
-    logger.info(f"Mode: {mode} (--mode {mode_name})")
-
-    # </init>
 
     # <data>
 
@@ -577,6 +564,13 @@ def main() -> None:
 
     # </params>
 
+    # set the device/logger pair
+    device, logger = common.initialize_run(
+        pathlib.Path(__file__).parent,
+        pathlib.Path(__file__).stem,
+        params,
+    )
+
     # reject modes that belong to train.py / run.py
     mode = get_mode_from_name(params["runconfig"]["mode"])
     allowed_modes = {Mode.PREDICT, Mode.EVAL}
@@ -591,7 +585,7 @@ def main() -> None:
     config_params.save(params, save_dir=params["runconfig"]["save_dir"])
 
     # evaluate the network
-    run_evaluate(params)
+    run_evaluate(params, device, logger)
 
 
 if __name__ == "__main__":

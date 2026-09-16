@@ -19,6 +19,7 @@ from dlk.mgmt.log import logging_get_logger
 from dlk.mode import Mode, get_mode_from_name
 from dlk.opt.optimizer import create_optimizer_from_config
 from dlk.opt.scheduler import create_learning_rate_scheduler_from_config
+from dlk.opt.train import train_epochs
 from dlk.opt.utils import checkpoint_load
 from nets import create_network
 from plot_utils import plot_loss
@@ -28,8 +29,8 @@ from data import create_dataloader
 
 def run_train(
     params: dict[str, Any],
-    device: torch.device | None = None,
-    logger: logging.Logger | None = None,
+    device: torch.device,
+    logger: logging.Logger,
 ) -> None:
     """Run training for a DNN inverse map.
 
@@ -40,8 +41,8 @@ def run_train(
     Args:
         params: Already-loaded configuration dict. Requires
             ``Mode.TRAIN`` in ``params["runconfig"]["mode"]``.
-        device: Optional pre-built torch device from ``common.initialize_run``.
-        logger: Optional pre-built logger from ``common.initialize_run``.
+        device: Torch device from ``common.initialize_run``.
+        logger: Logger from ``common.initialize_run``.
 
     Raises:
         ValueError: If ``params["runconfig"]["mode"]`` has no ``Mode.TRAIN`` bit.
@@ -52,26 +53,12 @@ def run_train(
 
     print(f"<{self_tag}>")
 
-    # <init>
-
-    # set mode
-    mode_name = params["runconfig"]["mode"]
-    mode = get_mode_from_name(mode_name)
+    # get mode
+    mode = get_mode_from_name(params["runconfig"]["mode"])
+    logger.info(f"Mode: {mode}")
     assert mode is not None
     if Mode.TRAIN not in mode:
-        raise ValueError(
-            f"run_train requires Mode.TRAIN in mode, got {mode} (--mode {mode_name})"
-        )
-
-    # set device/logger pair
-    if device is None or logger is None:
-        device, logger = common.initialize_run(self_dir, path_file.stem, params)
-    assert device is not None
-    assert logger is not None
-
-    logger.info(f"Mode: {mode} (--mode {mode_name})")
-
-    # </init>
+        raise ValueError(f"run_train requires Mode.TRAIN in mode, got {mode}")
 
     # <data>
 
@@ -156,8 +143,6 @@ def run_train(
         )
     else:
         # train network
-        from dlk.opt.train import train_epochs
-
         print("<train>")
         train_dlog = train_epochs(
             n_epochs=params["training"]["epochs"],
@@ -196,12 +181,13 @@ def run_train(
             f"Runtime statistics - avg. samples/sec: {n_steps * n_samples / time_train}"
         )
 
+        # plot loss
         path = self_dir / params["runconfig"]["save_dir"] / "loss"
         plot_loss(
-            train_dlog["loss_mean"],
-            path,
-            "Training loss",
-            params["training"]["epochs"],
+            loss=train_dlog["loss_mean"],
+            path=path,
+            plot_name="Training loss",
+            n_epochs=params["training"]["epochs"],
             loss_std=train_dlog["loss_std"],
             x_offset=1,
             y_scale="log",
@@ -245,6 +231,13 @@ def main() -> None:
 
     # </params>
 
+    # set the device/logger pair
+    device, logger = common.initialize_run(
+        pathlib.Path(__file__).parent,
+        pathlib.Path(__file__).stem,
+        params,
+    )
+
     # reject modes that belong to evaluate.py / run.py
     mode = get_mode_from_name(params["runconfig"]["mode"])
     allowed_modes = {Mode.TRAIN, Mode.TRAIN | Mode.PROFILE}
@@ -259,7 +252,7 @@ def main() -> None:
     config_params.save(params, save_dir=params["runconfig"]["save_dir"])
 
     # train the network
-    run_train(params)
+    run_train(params, device, logger)
 
 
 if __name__ == "__main__":
