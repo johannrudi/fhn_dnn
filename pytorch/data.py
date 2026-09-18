@@ -4,11 +4,12 @@ Handling of data.
 
 import inspect
 import logging
-import os
+import os  # TODO: use pathlib instead
 import pathlib
 
 import numpy as np
 import torch
+from dlk.data.loader import DataLoaderConfig
 from dlk.mode import Mode
 from torch.utils.data import DataLoader, Dataset
 
@@ -1008,11 +1009,8 @@ def create_dataloader(
     else:
         raise NotImplementedError()
 
-    # set arguments for dataset
-    dataset_kwargs = dict(noise_idx_random=shuffle)
-
     # create the dataset
-    logger.info("Create new dataset")
+    logger.info("New FHN_Dataset")
     dataset = FHN_Dataset(
         features,
         targets,
@@ -1024,48 +1022,34 @@ def create_dataloader(
         features_sub_begin_random=features_sub_begin_random,
         features_sub_begin_sequence=features_sub_begin_sequence,
         features_sub_step=features_sub_step,
+        noise_idx_random=shuffle,
         item_return_order=item_return_order,
-        **dataset_kwargs,
     )
 
     # set arguments for dataloader
-    dataloader_kwargs = {
-        "shuffle": shuffle,
-        "drop_last": False,
-        "batch_size": batch_size,
-    }
-    cpu_logical_cores = os.cpu_count()
-    if torch.cuda.is_available():
-        if cpu_logical_cores is not None:
-            n_workers = cpu_logical_cores // 4
-        else:
-            n_workers = 8
-        dataloader_kwargs.update(
-            {
-                "num_workers": n_workers,  # CPU subprocesses for data loading
-                "pin_memory": True,  # faster CPU->GPU transfer
-                "prefetch_factor": 2,  # batches to prefetch per worker
-                "persistent_workers": True,  # keep workers alive between epochs
-                "multiprocessing_context": "spawn",  # how to create workers (fork/spawn)
-            }
-        )
-    else:  # otherwise CPU-only setup
-        if cpu_logical_cores is not None:
-            n_workers = min(cpu_logical_cores, 2)
-        else:
-            n_workers = 2
-        dataloader_kwargs.update(
-            {
-                "num_workers": n_workers,
-                "prefetch_factor": 2,
-                "persistent_workers": True,
-                "multiprocessing_context": "spawn",
-            }
-        )
+    dataloader_params = params["dataloader"]
+    dataloader_config = DataLoaderConfig(
+        shuffle=shuffle,
+        drop_last=False,
+        batch_size=batch_size,
+        param_num_workers=dataloader_params.get("num_workers"),
+        param_prefetch_factor=dataloader_params.get("prefetch_factor"),
+        pin_memory=torch.accelerator.is_available(),
+    )
 
     # create the dataloader
-    logger.info("Create new dataloader")
-    dataloader = DataLoader(dataset, **dataloader_kwargs)
+    logger.info(f"New dataloader with {dataloader_config}")
+    dataloader = DataLoader(
+        dataset,
+        batch_size=dataloader_config.batch_size,
+        shuffle=dataloader_config.shuffle,
+        drop_last=dataloader_config.drop_last,
+        num_workers=dataloader_config.num_workers,
+        pin_memory=dataloader_config.pin_memory,
+        prefetch_factor=dataloader_config.prefetch_factor,
+        persistent_workers=dataloader_config.persistent_workers,
+        multiprocessing_context=dataloader_config.multiprocessing_context,
+    )
 
     # output
     return dataloader

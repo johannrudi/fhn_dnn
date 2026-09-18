@@ -60,7 +60,7 @@ def run_train(
 
     # get mode
     mode = get_mode_from_name(params["runconfig"]["mode"])
-    logger.info(f"Mode: {mode}")
+    logger.info(mode)
     assert mode is not None
     if Mode.TRAIN not in mode:
         raise ValueError(f"run_train requires Mode.TRAIN in mode, got {mode}")

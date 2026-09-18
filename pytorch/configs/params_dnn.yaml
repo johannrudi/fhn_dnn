@@ -40,6 +40,8 @@ data_evaluate:
 
 dataloader:
     item_return_order: "yx"
+    num_workers: 1            # optional; omit or set null to auto-detect from CPU/accelerator
+    prefetch_factor: 2        # optional; only used when num_workers > 0
 
 net:
 #   type: 'MLPNet'
@@ -116,7 +118,7 @@ optimizer:
 
 training:
     epochs: 400
-    # autocast_dtype = bfloat16
+    autocast_dtype: bfloat16
 
 runconfig:
     load_checkpoint: #'runs/dnn_fhn2020/checkpoints/<folder>/net_e<epoch>.pt'
