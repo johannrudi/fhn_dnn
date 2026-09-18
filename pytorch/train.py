@@ -26,6 +26,11 @@ from plot_utils import plot_loss
 
 from data import create_dataloader
 
+AUTOCAST_DTYPES = {
+    "bfloat16": torch.bfloat16,
+    "float32": torch.float32,
+}
+
 
 def run_train(
     params: dict[str, Any],
@@ -114,6 +119,12 @@ def run_train(
     # set loss function
     loss_fn = torch.nn.MSELoss()
 
+    # set mixed precision
+    autocast_dtype = params["training"].get("autocast_dtype")
+    if autocast_dtype:
+        autocast_dtype = AUTOCAST_DTYPES[autocast_dtype]
+        logger.info(f"Enable autocast with dtype={autocast_dtype}")
+
     # checkpointing for saving network weights
     checkpoint_dir = self_dir / params["runconfig"]["save_dir"] / "checkpoints"
     checkpoint_epochs = params["runconfig"]["save_checkpoints_epochs"]
@@ -122,25 +133,31 @@ def run_train(
     time_train: float = np.nan
 
     if Mode.PROFILE in mode:
-        # profile training
         from dlk.opt.profiler import profile_train_batches
         from dlk.opt.train import train_batches
 
-        train_batches_kwargs = dict(
-            device=device,
-            inputs_transform_fn=train_input_transform_fn,
-        )
-        log_profile_dir = self_dir / params["runconfig"]["save_dir"] / "profile"
-
-        profile_train_batches(
-            train_batches,
-            train_batches_kwargs,
+        train_batches_args = (
             net,
             dataloader,
             optimizer,
             loss_fn,
-            log_profile_dir=log_profile_dir,
         )
+        train_batches_kwargs = dict(
+            device=device,
+            inputs_transform_fn=train_input_transform_fn,
+            autocast_dtype=autocast_dtype,
+        )
+        trace_dir = self_dir / params["runconfig"]["save_dir"] / "profile"
+
+        # profile training
+        print("<train_profile>")
+        profile_train_batches(
+            train_batches,
+            train_batches_args,
+            train_batches_kwargs,
+            trace_dir=trace_dir,
+        )
+        print("</train_profile>")
     else:
         # train network
         print("<train>")
@@ -155,6 +172,7 @@ def run_train(
             inputs_transform_fn=train_input_transform_fn,
             checkpoint_epochs=checkpoint_epochs,
             checkpoint_dir=checkpoint_dir,
+            autocast_dtype=autocast_dtype,
         )
         time_train = train_dlog.get("time_train", np.nan)
         print("</train>")

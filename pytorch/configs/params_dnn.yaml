@@ -116,6 +116,7 @@ optimizer:
 
 training:
     epochs: 400
+    # autocast_dtype = bfloat16
 
 runconfig:
     load_checkpoint: #'runs/dnn_fhn2020/checkpoints/<folder>/net_e<epoch>.pt'
