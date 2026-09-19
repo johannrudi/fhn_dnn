@@ -1,6 +1,0 @@
-matplotlib
-numpy
-pyyaml
-scikit-learn
-torch
-deep-learning-toolkit

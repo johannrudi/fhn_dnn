@@ -3,23 +3,20 @@
 ## Commands
 
 ```bash
-# Format and lint
-make format-check     # check formatting (black + isort)
-make format           # auto-format
-make lint             # type-check with basedpyright
-
-# Tests
-make test             # compile then run pytest
-make testv            # verbose test output
-make testvv           # extra verbose (pytest -sv)
+# Format and lint (run from this directory)
+uv run --no-sync isort --check-only .    # check import order
+uv run --no-sync black --check .         # check formatting
+uv run --no-sync isort . && uv run --no-sync black .   # auto-format
+uv run --no-sync basedpyright .          # type-check
 
 # Run training / evaluation (preferred split entry points)
-uv run python train.py --params configs/params_dnn.yaml
-uv run python evaluate.py --params configs/params_dnn.yaml
-uv run python run.py --params configs/params_dnn.yaml          # train then evaluate
-uv run python run.py --params configs/params_dnn.yaml \
-    --json_params '{"data_train": {"Ntrain": 1024}}'  # inline overrides
+uv run --no-sync python train.py --params configs/params_dnn.yaml
+uv run --no-sync python evaluate.py --params configs/params_dnn.yaml
+uv run --no-sync python run.py --params configs/params_dnn.yaml  # train then evaluate
+uv run --no-sync python run.py --params configs/params_dnn.yaml --json_params '{"data_train": {"Ntrain": 1024}}'  # inline overrides
 ```
+
+Always pass `--no-sync`. A bare `uv run` re-syncs the default groups, which resolves `torch` from PyPI and replaces the accelerator build installed for a specific machine (breaking CUDA). To (re)install deliberately, name the group matching the local driver, e.g. `uv sync --group cu126`.
 
 ## Architecture
 
@@ -44,7 +41,7 @@ All configs are YAML in `configs/`. The key sections are:
 - `data_evaluate` — eval feature/target knobs, Ntest, eval batch size
 - `net` — network type and architecture hyperparameters
 - `optimizer` — type, learning rate, betas, weight decay, optional LR scheduler
-- `training` — number of epochs
+- `training` — number of epochs, optional `autocast_dtype`, and `torch.compile` settings (`compile`, `compile_mode`, `compile_fullgraph`, `compile_dynamic`, `profile_warmup_steps`)
 - `runconfig` — save dir, optional `load_checkpoint`, checkpoint frequency, debug flag
 
 `params_dnn_2025.yaml` is the current DNN default. The `params_m*.yaml` files are scalability study variants (varying network width M=4/16/64/256/1024).

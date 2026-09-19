@@ -10,29 +10,37 @@ This repository implements parameter estimation for the FitzHugh-Nagumo ODE usin
 
 Navigate to `pytorch/` directory for all PyTorch commands.
 
+Always pass `--no-sync`. A bare `uv run` re-syncs the default groups, which resolves `torch` from PyPI and replaces the accelerator build installed for a specific machine (breaking CUDA). To (re)install deliberately, name the group matching the local driver, e.g. `uv sync --group cu126`.
+
 **Install dependencies:**
 ```bash
-cd pytorch
-pip install -r requirements.txt
+# Sync the accelerator group matching the local driver: cpu, cu126, cu128,
+# cu130, cu132, or xpu. Without a group, `torch` resolves from PyPI and you
+# get a build that may not match the driver.
+uv sync --group cu126
+
+# Add the dev tools (black, isort, basedpyright) in the same command, so the
+# accelerator group is not dropped from the resolution:
+uv sync --group cu126 --group dev
 ```
 
 **Train a model:**
 ```bash
-uv run python train.py --params configs/params_dnn.yaml
+uv run --no-sync python train.py --params configs/params_dnn.yaml
 # legacy:
-uv run python run_dnn.py --params configs/params_dnn.yaml --mode train
+uv run --no-sync python run_dnn.py --params configs/params_dnn.yaml --mode train
 ```
 
 **Evaluate a model:**
 ```bash
-uv run python evaluate.py --params configs/params_dnn.yaml
+uv run --no-sync python evaluate.py --params configs/params_dnn.yaml
 # legacy:
-uv run python run_dnn.py --params configs/params_dnn.yaml --mode eval
+uv run --no-sync python run_dnn.py --params configs/params_dnn.yaml --mode eval
 ```
 
 **Train then evaluate (combined):**
 ```bash
-uv run python run.py --params configs/params_dnn.yaml
+uv run --no-sync python run.py --params configs/params_dnn.yaml
 ```
 
 **Run autoencoder:**
