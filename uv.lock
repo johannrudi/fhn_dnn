@@ -38,6 +38,15 @@ wheels = [
 ]
 
 [[package]]
+name = "annotated-doc"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/8e/38aa427ed5402449e226975b649c5dc73ccadfefeb95e6aecb8f8ea4b6b6/annotated_doc-0.0.5.tar.gz", hash = "sha256:c7e58ce09192557605d8bbd92836d7e1d520ac9580096042c0bfd197efacf1bb", size = 10758, upload-time = "2026-07-28T13:50:58.129Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl", hash = "sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101", size = 5302, upload-time = "2026-07-28T13:50:57.239Z" },
+]
+
+[[package]]
 name = "basedpyright"
 version = "1.40.1"
 source = { registry = "https://pypi.org/simple" }
@@ -580,6 +589,7 @@ name = "deep-learning-toolkit"
 version = "0.5.0"
 source = { editable = "../../deep-learning-toolkit" }
 dependencies = [
+    { name = "flow-matching" },
     { name = "matplotlib" },
     { name = "prettytable" },
     { name = "pyyaml" },
@@ -591,7 +601,9 @@ dependencies = [
     { name = "torch", version = "2.14.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'group-7-fhn-dnn-cu130' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu')" },
     { name = "torch", version = "2.14.0+cu132", source = { registry = "https://download.pytorch.org/whl/cu132" }, marker = "extra == 'group-7-fhn-dnn-cu132' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu128' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu')" },
     { name = "torch", version = "2.14.0+xpu", source = { registry = "https://download.pytorch.org/whl/xpu" }, marker = "(extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra != 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu128' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu')" },
+    { name = "torch-kde" },
     { name = "tqdm" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
@@ -604,13 +616,16 @@ kde = [
 
 [package.metadata]
 requires-dist = [
+    { name = "flow-matching", specifier = ">=1.0.10,<2" },
     { name = "flow-matching", marker = "extra == 'diffusion'", specifier = ">=1.0.10,<2" },
     { name = "matplotlib", specifier = ">=3,<4" },
     { name = "prettytable", specifier = ">=3,<4" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "torch", specifier = ">=2.11,<3" },
+    { name = "torch-kde", specifier = ">=0.1.5" },
     { name = "torch-kde", marker = "extra == 'kde'", specifier = ">=0.1.5" },
     { name = "tqdm", specifier = ">=4,<5" },
+    { name = "typer", specifier = ">=0.27" },
 ]
 provides-extras = ["diffusion", "kde"]
 
@@ -623,10 +638,8 @@ cu132 = [{ name = "torch", specifier = ">=2.11,<3", index = "https://download.py
 dev = [
     { name = "basedpyright", specifier = ">=1.39,<2" },
     { name = "black", specifier = ">=25,<26" },
-    { name = "flow-matching", specifier = ">=1.0.10,<2" },
     { name = "isort", specifier = ">=5,<6" },
     { name = "pytest", specifier = ">=8,<9" },
-    { name = "torch-kde", specifier = ">=0.1.5" },
 ]
 xpu = [
     { name = "torch", specifier = ">=2.11,<3", index = "https://download.pytorch.org/whl/xpu", conflict = { package = "deep-learning-toolkit", group = "xpu" } },
@@ -1147,6 +1160,18 @@ wheels = [
 ]
 
 [[package]]
+name = "markdown-it-py"
+version = "4.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mdurl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz", hash = "sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49", size = 82454, upload-time = "2026-05-07T12:08:28.36Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
+]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1291,6 +1316,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/d9/a1218a31fa2d8082eb893548990ad09a2005ebda1b2b89dad88a8308e51a/matplotlib-3.11.2-pp311-pypy311_pp73-macosx_10_15_x86_64.whl", hash = "sha256:854df8d7dfe9fdffcbaa6f39e44a6c24b409cb4d7561fbc09213b157d833f6a6", size = 9457702, upload-time = "2026-09-11T19:05:22.086Z" },
     { url = "https://files.pythonhosted.org/packages/68/d7/a9fde05d87c3c853f233ec20c5b5c3a1c86035e1ed4bfa397cd54d46ec90/matplotlib-3.11.2-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:eac4b07d4e3743b172451e122ea964f72f152879d4f9adcf3f3d33e518f12ead", size = 9287753, upload-time = "2026-09-11T19:05:24.677Z" },
     { url = "https://files.pythonhosted.org/packages/ec/79/ea2ae4eab84f011c1dc8145864f78e5a63adda8efb95557ef36cc38e6da2/matplotlib-3.11.2-pp311-pypy311_pp73-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:7ef7a53b66780e5d942923724f08577fbc5be1f7322da0f0f3f9dcaa45dd803d", size = 9848259, upload-time = "2026-09-11T19:05:27.455Z" },
+]
+
+[[package]]
+name = "mdurl"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
 
 [[package]]
@@ -2567,6 +2601,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pygments"
+version = "2.21.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/2e/ced460408999b33da6b31b0021b0f37d329e202d4169aeb164493778f25b/pygments-2.21.0.tar.gz", hash = "sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c", size = 5005329, upload-time = "2026-08-17T08:02:48.824Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9", size = 1250147, upload-time = "2026-08-17T08:02:44.912Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2683,6 +2726,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/da/c40076150353b25d4b23ecf99486781feb54d55059f272d4ea1efe4cc8a7/pyzes-0.1.2.tar.gz", hash = "sha256:21667f0a23b15fcf81c1267dbc86f5a9b0d5118297cae645e4ab31c50e9e7d6b", size = 32567, upload-time = "2026-06-12T08:48:20.076Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/74/46/90e1741b3926e3b8590dfaa819439891865568fc5c90a0f5596b76ee6bff/pyzes-0.1.2-py3-none-any.whl", hash = "sha256:5638684399049940414071afafff91ee87f18807457b3cb0d31cd5d5a0b7db23", size = 30809, upload-time = "2026-06-12T08:48:19.126Z" },
+]
+
+[[package]]
+name = "rich"
+version = "15.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
 ]
 
 [[package]]
@@ -2974,6 +3030,15 @@ resolution-markers = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz", hash = "sha256:f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73", size = 1168449, upload-time = "2026-08-08T18:27:58.365Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl", hash = "sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670", size = 818216, upload-time = "2026-08-08T18:27:56.719Z" },
+]
+
+[[package]]
+name = "shellingham"
+version = "1.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
 ]
 
 [[package]]
@@ -3578,6 +3643,21 @@ wheels = [
     { url = "https://download-r2.pytorch.org/whl/triton_xpu-3.8.0-cp315-cp315-win_amd64.whl", hash = "sha256:cd15dffba8e3b434c2637794beb03323e8d4ed417eac3ded1605519a2afe7a08", upload-time = "2026-09-02T01:12:20Z" },
     { url = "https://download-r2.pytorch.org/whl/triton_xpu-3.8.0-cp315-cp315t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:138970b2e5b4723b990b8aac9d5228650f9066b1547cad1204b79fc063409797", upload-time = "2026-09-02T01:12:32Z" },
     { url = "https://download-r2.pytorch.org/whl/triton_xpu-3.8.0-cp315-cp315t-win_amd64.whl", hash = "sha256:83d16b713b3cf9583f82a3f3491a82cb2bc9a33b515ad89e186090f8711c507a", upload-time = "2026-09-02T01:12:44Z" },
+]
+
+[[package]]
+name = "typer"
+version = "0.27.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu')" },
+    { name = "rich" },
+    { name = "shellingham" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/f7/57713ba479fd405eb76de31404b2c744c289e336b2d999511ebf51e496f7/typer-0.27.2.tar.gz", hash = "sha256:269b7eb9d3c202ca84b4bc9618cb04ebb43d3d4d1e567e4c768607232c05f945", size = 204045, upload-time = "2026-08-28T10:26:55.046Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/bf/205d0004930ede8f542fb58f601526fccf4ae7626075ca1e6c4de5d3d652/typer-0.27.2-py3-none-any.whl", hash = "sha256:b3a5fc4342d5fc8fda8fc3010b1cf117e9249aab7fae800c2eff62fd3842d97d", size = 123130, upload-time = "2026-08-28T10:26:53.752Z" },
 ]
 
 [[package]]
