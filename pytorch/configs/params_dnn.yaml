@@ -118,7 +118,12 @@ optimizer:
 
 training:
     epochs: 400
-    autocast_dtype: bfloat16
+    # compile:
+    #     mode: "reduce-overhead"  # "default", "reduce-overhead" (CUDA graphs), "max-autotune", "max-autotune-no-cudagraphs"
+    #     fullgraph: False         # error out instead of falling back on graph breaks
+    #     dynamic:                 # empty (auto), True, or False (static shapes)
+    # profile_skip_first: 8        # untraced steps before profiling (e.g., use 8 when compile is enabled)
+    # autocast_dtype = bfloat16    # use mixed precision
 
 runconfig:
     load_checkpoint: #'runs/dnn_fhn2020/checkpoints/<folder>/net_e<epoch>.pt'

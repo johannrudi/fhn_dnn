@@ -17,8 +17,9 @@ import torch
 from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger
 from dlk.mode import Mode, get_mode_from_name
-from dlk.opt.optimizer import create_optimizer_from_config
-from dlk.opt.scheduler import create_learning_rate_scheduler_from_config
+from dlk.opt.compile import compile_net_from_params
+from dlk.opt.optimizer import create_optimizer_from_params
+from dlk.opt.scheduler import create_learning_rate_scheduler_from_params
 from dlk.opt.train import train_epochs
 from dlk.opt.utils import checkpoint_load
 from nets import create_network
@@ -104,15 +105,18 @@ def run_train(
         epoch = checkpoint_load(checkpoint_path, net, map_location=device)
         logger.info(f"Resume at checkpoint: {checkpoint_path} (epoch {epoch})")
 
+    # compile the network (no-op unless enabled in the config)
+    net = compile_net_from_params(net, params["training"].get("compile"))
+
     # </network>
 
     # <train>
 
     # create optimizer
-    optimizer = create_optimizer_from_config(net, params["optimizer"])
+    optimizer = create_optimizer_from_params(net, params["optimizer"])
 
     # create learning rate scheduler
-    lr_scheduler = create_learning_rate_scheduler_from_config(
+    lr_scheduler = create_learning_rate_scheduler_from_params(
         optimizer, params["optimizer"], params["training"]["epochs"]
     )
 
@@ -142,7 +146,7 @@ def run_train(
             optimizer,
             loss_fn,
         )
-        train_batches_kwargs = dict(
+        train_batches_kwargs: dict[str, Any] = dict(
             device=device,
             inputs_transform_fn=train_input_transform_fn,
             autocast_dtype=autocast_dtype,
@@ -155,6 +159,7 @@ def run_train(
             train_batches,
             train_batches_args,
             train_batches_kwargs,
+            skip_first=params["training"].get("profile_skip_first", 0),
             trace_dir=trace_dir,
         )
         print("</train_profile>")
@@ -183,23 +188,8 @@ def run_train(
 
     show_plots = params["runconfig"].get("show_plots", False)
 
-    # log training runtimes and plot loss (skip for profile-only runs)
+    # plot loss (skip for profile-only runs)
     if train_dlog is not None:
-        logger.info(f"Runtime [sec]:                         {time_train}")
-        n_epoch = params["training"]["epochs"]
-        n_steps = params["training"]["epochs"] * (
-            params["data_train"]["Ntrain"] // params["data_train"]["train_batch_size"]
-        )
-        n_samples = params["data_train"]["train_batch_size"]
-        logger.info(f"Runtime statistics - #epochs:          {n_epoch}")
-        logger.info(f"Runtime statistics - #steps:           {n_steps}")
-        logger.info(f"Runtime statistics - #samples (total): {n_steps * n_samples}")
-        logger.info(f"Runtime statistics - avg. steps/sec:   {n_steps / time_train}")
-        logger.info(
-            f"Runtime statistics - avg. samples/sec: {n_steps * n_samples / time_train}"
-        )
-
-        # plot loss
         path = self_dir / params["runconfig"]["save_dir"] / "loss"
         plot_loss(
             loss=train_dlog["loss_mean"],

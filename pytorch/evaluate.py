@@ -399,9 +399,9 @@ def _log_runtime(
         tag: Optional suffix after ``Runtime`` (e.g. ``" [net_e0040]"``).
             Empty string keeps the untagged ``test``-path format.
     """
-    logger.info(f"Runtime{tag} [sec]:                         {time_eval}")
-    logger.info(f"Runtime statistics{tag} - #samples:         {n_samples}")
-    logger.info(f"Runtime statistics{tag} - avg. samples/sec: {n_samples / time_eval}")
+    logger.info(
+        f"time{tag} {time_eval} s, #samples {n_samples}, samples/sec mean {n_samples / time_eval}"
+    )
 
 
 def _plot_predictions(
