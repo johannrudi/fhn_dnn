@@ -637,7 +637,7 @@ cu130 = [{ name = "torch", specifier = ">=2.11,<3", index = "https://download.py
 cu132 = [{ name = "torch", specifier = ">=2.11,<3", index = "https://download.pytorch.org/whl/cu132", conflict = { package = "deep-learning-toolkit", group = "cu132" } }]
 dev = [
     { name = "basedpyright", specifier = ">=1.39,<2" },
-    { name = "black", specifier = ">=25,<26" },
+    { name = "black", extras = ["jupyter"], specifier = ">=25,<26" },
     { name = "isort", specifier = ">=5,<6" },
     { name = "pytest", specifier = ">=8,<9" },
 ]

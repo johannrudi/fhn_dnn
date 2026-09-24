@@ -34,4 +34,4 @@ max_line_length = 88
 # Option files
 [*.{yaml}]
 indent_style = space
-indent_size = 2
+indent_size = 4

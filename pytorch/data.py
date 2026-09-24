@@ -1034,7 +1034,7 @@ def create_dataloader(
         batch_size=batch_size,
         param_num_workers=dataloader_params.get("num_workers"),
         param_prefetch_factor=dataloader_params.get("prefetch_factor"),
-        pin_memory=torch.accelerator.is_available(),
+        param_pin_memory=torch.accelerator.is_available(),
     )
 
     # create the dataloader
