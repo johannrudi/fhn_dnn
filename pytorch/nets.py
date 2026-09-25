@@ -84,7 +84,6 @@ def _create_MLPResNet(
     logger,
     hidden_input_size: int | list[int] = 0,
 ):
-    activation_fn = _get_activation(net_params["activation_fn"])
     embed_size = net_params.get("embedding_size", 1)
     # deep-copy so latent/target injection never mutates params in place
     residual_blocks_sizes = copy.deepcopy(net_params["residual_blocks_sizes"])
@@ -107,10 +106,9 @@ def _create_MLPResNet(
         embedding_size=embed_size,
         attention_blocks_n_heads=net_params.get("attention_layers_n_heads"),
         attention_blocks_activation_size=embed_size * 4,
-        attention_blocks_activation=activation_fn,
         residual_blocks_sizes=residual_blocks_sizes,
-        residual_blocks_activation=activation_fn,
-        use_dropout=net_params.get("dropout", False),
+        dropout=float(net_params.get("dropout") or 0.0),
+        enable_spectral_norm=net_params.get("spectral_norm", False),
         output_layer_activation=None,
     )
 
@@ -158,31 +156,30 @@ def _create_convResNet(
     output_size,
     net_params,
     logger,
-    mlb_kwargs={},
+    block_kwargs: dict | None = None,
     mlp_block_hidden_input_size: int | list[int] = 0,
 ):
-    activation_fn = _get_activation(net_params["activation_fn"])
-    use_dropout = net_params.get("dropout", False)
+    dropout = float(net_params.get("dropout") or 0.0)
+    spectral_norm = net_params.get("spectral_norm", False)
     kernel = net_params.get("conv_layer_kernel", 3)
     stride = net_params.get("conv_layer_stride", 2)
     padding = net_params.get("conv_layer_padding", 1)
-    # padding_mode = net_params.get("conv_layer_padding_mode", "replicate")
+    padding_mode = net_params.get("conv_layer_padding_mode", "replicate")
     n_conv_layers = len(net_params["conv_layer_sizes"])
     # set parameters of convolution block
-    mlb_kwargs = dict(mlb_kwargs)
-    mlb_kwargs.update(
-        {
-            "padding": 1,
-            "padding_mode": "replicate",
-            "stride": 2,
-        }
-    )
+    block_kwargs = dict(block_kwargs or {})
+    block_kwargs["conv_kwargs"] = {
+        "padding": padding,
+        "padding_mode": padding_mode,
+        "stride": stride,
+        **(block_kwargs.get("conv_kwargs") or {}),
+    }
     conv_resnet_params = {
         "channels_mult": net_params["conv_layer_sizes"],
         "kernels": n_conv_layers * [kernel],
-        "activation": activation_fn,
-        "use_dropout": use_dropout,
-        "mlb_kwargs": mlb_kwargs,
+        "dropout": dropout,
+        "enable_spectral_norm": spectral_norm,
+        "block_kwargs": block_kwargs,
     }
     # calculate length of features after convolutional layers
     n_channels = input_channels * net_params["conv_layer_sizes"][-1]
@@ -209,21 +206,21 @@ def _create_convResNet(
         "input_size": flattened_input_size,
         "output_size": output_size,
         "residual_blocks_sizes": residual_blocks_sizes,
-        "residual_blocks_activation": activation_fn,
-        "use_dropout": use_dropout,
-        "output_layer_activation": None,
+        "dropout": dropout,
+        "enable_spectral_norm": spectral_norm,
     }
     # create net
-    logger.info(f"create ConvResNet({input_channels}, ...)")
+    logger.info(f"create ConvResNet({input_channels}, {input_size}, ...)")
     return ConvResNet(
         input_channels,
+        input_length=input_size,
         conv_resnet_params=conv_resnet_params,
         mlp_resnet_params=mlp_resnet_params,
     )
 
 
 def _create_efficientNet(input_channels, input_size, output_size, net_params, logger):
-    use_dropout = net_params.get("dropout", False)
+    dropout = net_params.get("dropout", 0.0)
     logger.info(
         f"create EfficientNet({input_channels}, {input_size}, {output_size}, ...)"
     )
@@ -231,8 +228,8 @@ def _create_efficientNet(input_channels, input_size, output_size, net_params, lo
         input_channels=input_channels,
         input_length=input_size,
         num_classes=output_size,
-        dropout_connect=use_dropout if use_dropout else 0.0,
-        dropout_head=use_dropout if use_dropout else 0.0,
+        dropout_connect=dropout,
+        dropout_head=dropout,
     )
 
 
@@ -240,7 +237,7 @@ def _create_transformerNet(input_channels, input_size, output_size, net_params, 
     patch_size = net_params.get("patch_size", input_size // 10)
     embed_size = net_params.get("embedding_size")
     attn_n_heads = net_params.get("attention_layers_n_heads")
-    use_dropout = net_params.get("dropout", False)
+    dropout = net_params.get("dropout", 0.0)
     if 1 == input_channels:
         logger.info(f"create TransformerNet({input_size}, {output_size}, ...)")
         return TransformerNet(
@@ -249,7 +246,7 @@ def _create_transformerNet(input_channels, input_size, output_size, net_params, 
             patch_size=patch_size,
             embedding_size=embed_size,
             attn_n_heads=attn_n_heads,
-            dropout=use_dropout if use_dropout else 0.0,
+            dropout=dropout,
         )
     else:
         logger.info(
@@ -262,7 +259,7 @@ def _create_transformerNet(input_channels, input_size, output_size, net_params, 
             patch_size=patch_size,
             embedding_size=embed_size,
             attn_n_heads=attn_n_heads,
-            dropout=use_dropout if use_dropout else 0.0,
+            dropout=dropout,
         )
 
 
@@ -413,7 +410,7 @@ def create_enc_dec(params, logger):
             latent_size,
             residual_blocks_sizes=e_net_params["residual_blocks_sizes"],
             residual_blocks_activation=_get_activation(e_net_params["activation_fn"]),
-            use_dropout=e_net_params["dropout"],
+            dropout=float(e_net_params["dropout"] or 0.0),
         )
     elif NetworkType.CONVNET == e_net_type:
         e_net = EncoderConvNet(
@@ -440,7 +437,7 @@ def create_enc_dec(params, logger):
             output_size,
             residual_blocks_sizes=d_net_params["residual_blocks_sizes"],
             residual_blocks_activation=_get_activation(d_net_params["activation_fn"]),
-            use_dropout=d_net_params["dropout"],
+            dropout=float(d_net_params["dropout"] or 0.0),
         )
     elif NetworkType.CONVNET == d_net_type:
         d_net = DecoderConvNet(

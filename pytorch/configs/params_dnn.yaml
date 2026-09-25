@@ -44,11 +44,11 @@ dataloader:
     prefetch_factor: 2        # optional; only used when num_workers > 0
 
 net:
-#   type: 'MLPNet'
+#   type: "MLPNet"
 #   dense_layer_sizes: [128, 128, 128, 128]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
-#   type: 'MLPResNet'
+#   type: "MLPResNet"
 #   residual_blocks_sizes:
 #       - [32, 32, 128, 32]
 #       - [32, 32, 128, 32]
@@ -56,13 +56,13 @@ net:
 #       - [32, 32, 128, 32]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
-#   type: 'ConvNet'
+#   type: "ConvNet"
 #   conv_layer_kernel: 3
 #   conv_layer_sizes: [8, 16, 32]
 #   dense_layer_sizes: [128, 128, 128, 128]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
-    type: 'ConvResNet'
+    type: "ConvResNet"
     conv_layer_kernel: 3
     conv_layer_padding: 1
     conv_layer_sizes: [8, 8, 8]
@@ -71,12 +71,11 @@ net:
         - [32, 32, 128, 32]
         - [32, 32, 128, 32]
         - [32, 32, 128, 32]
-    activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
 #   type: "EfficientNet"
 #   dropout: 0.0
 
-#   type: 'TransformerNet'
+#   type: "TransformerNet"
 #   embedding_size: 128
 #   attention_layers_n_heads: [8, 8, 8, 8, 8, 8]
 #   patch_size: 50
@@ -84,7 +83,7 @@ net:
 
 optimizer:
     type: "AdamW"  # "Adam", "AdamW"
-    learning_rate: 1.0e-2
+    learning_rate: 1.0e-3
     beta1: 0.9
     beta2: 0.999
     epsilon: 1.0e-8
