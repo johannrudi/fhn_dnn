@@ -984,11 +984,13 @@ def create_dataloader(
     """
     mode_scope = "train" if mode.any(Mode.TRAIN | Mode.PROFILE) else "evaluate"
     mode_data_params = _resolve_data_params(params, mode_scope)
-    features_additive_noise_std = mode_data_params.get(
-        "features_additive_noise_std", 0.0
+    features_additive_noise_std = (
+        mode_data_params.get("features_additive_noise_std") or 0.0
     )
-    features_sub_length = mode_data_params.get("features_sub_length", 0)
-    features_sub_begin_random = mode_data_params.get("features_sub_begin_random", False)
+    features_sub_length = mode_data_params.get("features_sub_length") or 0
+    features_sub_begin_random = (
+        mode_data_params.get("features_sub_begin_random") or False
+    )
     features_sub_begin_sequence = mode_data_params.get("features_sub_begin_sequence")
     features_sub_step = mode_data_params.get("features_sub_step")
     item_return_order = params["dataloader"]["item_return_order"]
