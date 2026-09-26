@@ -58,8 +58,15 @@ def initialize_run(
     else:
         params["runconfig"]["random_seed"] = None
 
+    # create the save_dir directory
+    save_dir = self_dir / params["runconfig"]["save_dir"]
+    try:
+        save_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise ValueError(f"invalid path {save_dir}") from error
+
     # set up logging
-    logging_set_up(self_dir / params["runconfig"]["save_dir"] / self_name)
+    logging_set_up(save_dir / self_name)
     logger = logging_get_logger(self_name)
 
     # log environment (Mode / Data key are logged by each caller)

@@ -39,9 +39,6 @@ def main() -> None:
 
     # </params>
 
-    # save parameters for reproducibility
-    config_params.save(params, save_dir=params["runconfig"]["save_dir"])
-
     # set one device/logger pair for the whole process
     device, _ = common.initialize_run(
         pathlib.Path(__file__).parent,
@@ -52,6 +49,9 @@ def main() -> None:
     # get mode
     mode = get_mode_from_name(params["runconfig"]["mode"])
     assert mode is not None
+
+    # save parameters for reproducibility
+    config_params.save(params, save_dir=params["runconfig"]["save_dir"])
 
     # train the network
     if Mode.TRAIN in mode:
