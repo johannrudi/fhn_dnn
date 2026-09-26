@@ -509,13 +509,10 @@ def main():
     params = config_params.load(args.params)
 
     # set/override runconfig parameters from args
-    config_params.update_runconfig_params_from_args(params["runconfig"], args)
+    config_params.override_runconfig_from_args(params["runconfig"], args)
 
     # override parameters from JSON and/or TOML inputs
-    if args.json_params is not None:
-        config_params.update_from_json(params, args.json_params)
-    if args.toml_params is not None:
-        config_params.update_from_toml(params, args.toml_params)
+    config_params.override_params_from_args(params, args)
 
     # save parameters for reproducibility
     config_params.save(params, save_dir=params["runconfig"]["save_dir"])

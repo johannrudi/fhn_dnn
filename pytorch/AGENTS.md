@@ -13,7 +13,7 @@ uv run --no-sync basedpyright .          # type-check
 uv run --no-sync python train.py --params configs/params_dnn.yaml
 uv run --no-sync python evaluate.py --params configs/params_dnn.yaml
 uv run --no-sync python run.py --params configs/params_dnn.yaml  # train then evaluate
-uv run --no-sync python run.py --params configs/params_dnn.yaml --json_params '{"data_train": {"Ntrain": 1024}}'  # inline overrides
+uv run --no-sync python run.py --params configs/params_dnn.yaml --json-params '{"data_train": {"Ntrain": 1024}}'  # inline overrides
 ```
 
 Always pass `--no-sync`. A bare `uv run` re-syncs the default groups, which resolves `torch` from PyPI and replaces the accelerator build installed for a specific machine (breaking CUDA). To (re)install deliberately, name the group matching the local driver, e.g. `uv sync --group cu126`.
