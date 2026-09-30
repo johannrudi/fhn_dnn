@@ -61,11 +61,7 @@ def main() -> None:
 
         # train the network
         if Mode.TRAIN in mode:
-            train.run_train(
-                params,
-                ctx,
-                logger=logging_get_logger("train"),
-            )
+            train.run_train(params, ctx, logging_get_logger("train"))
             # force evaluate to auto-discover the checkpoint just written
             params["runconfig"]["load_checkpoint"] = None
 
@@ -74,11 +70,7 @@ def main() -> None:
     # NOTE: use `ctx.is_main` here: `distributed.is_main_process()` is True on
     #       every rank once the process group no longer exists
     if ctx.is_main and mode.any(Mode.PREDICT | Mode.EVAL):
-        evaluate.run_evaluate(
-            params,
-            device=ctx.device,
-            logger=logging_get_logger("evaluate"),
-        )
+        evaluate.run_evaluate(params, ctx, logging_get_logger("evaluate"))
 
 
 if __name__ == "__main__":

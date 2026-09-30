@@ -57,14 +57,16 @@ def initialize_run(
     logging_set_up(save_dir / log_name)
     logger = logging_get_logger(log_name)
 
+    # get seed from parameters
+    base_seed = params["runconfig"].get("random_seed")
+
     # log environment (Mode / Data key are logged by each caller)
     logger.info(f"ENV - Directory:              {self_dir}")
     logger.info(f"ENV - PyTorch version:        {torch.__version__}")
-    logger.info(
-        f"ENV - Seed:                   {params['runconfig'].get('random_seed')}"
-    )
+    logger.info(f"ENV - Seed:                   {base_seed}")
     logger.info(f"ENV - Distributed:            {ctx.is_distributed}")
     logger.info(f"ENV - World size:             {ctx.world_size}")
+    logger.info(f"ENV - Local world size:       {ctx.local_world_size}")
     logger.info(f"ENV - CPU logical cores:      {os.cpu_count()}")
     logger.info(f"ENV - Affinity-aware cores:   {len(os.sched_getaffinity(0))}")
     logger.info(f"ENV - Torch threads intra-op: {torch.get_num_threads()}")
@@ -79,7 +81,6 @@ def initialize_run(
         print("</parameters>")
 
     # fix random seed for reproducibility
-    base_seed = params["runconfig"].get("random_seed")
     if base_seed is not None:
         distributed.seed_random_generators(base_seed)
     else:

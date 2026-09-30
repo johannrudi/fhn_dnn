@@ -78,16 +78,16 @@ def run_train(
 
     # create training dataloader
     dataloader = create_dataloader(
-        params,
-        logging_get_logger("create_dataloader"),
-        mode,
+        params=params,
+        logger=logging_get_logger("create_dataloader"),
+        mode=mode,
         features=features["train"],
         targets=targets["train"],
         features_noise=features_noise["train"],
         targets_noise=targets_noise["train"],
         features_transform_fn=features_transform_fn,
         base_seed=params["runconfig"].get("random_seed") or 0,
-        with_distributed=ctx.is_distributed,
+        ctx=ctx,
     )
 
     # </data>

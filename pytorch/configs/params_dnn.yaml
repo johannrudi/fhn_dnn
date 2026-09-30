@@ -22,8 +22,7 @@ data_train:
     targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntrain:    1024
     Nvalidate: 1000
-    train_shuffle_buffer_size: 1024
-    train_batch_size: 128
+    batch_size: 128
 
 data_evaluate:
     features_type: "TIME_NOISE"     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
@@ -36,7 +35,7 @@ data_evaluate:
     ##num_features: [3, 500]
     targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
     Ntest: 2000
-    eval_batch_size: 128
+    batch_size: 128
 
 dataloader:
     item_return_order: "yx"

@@ -970,6 +970,29 @@ class FHN_Dataset(Dataset):
             raise ValueError(f"Unknown item return order: {self.item_return_order}")
 
 
+def _resolve_batch_size(
+    world_size: int,
+    global_batch_size: int | None,
+    local_batch_size: int | None,
+) -> tuple[int, int]:
+    """Turn whichever batch flag was given into a global and a local batch size."""
+
+    if local_batch_size is not None:
+        if global_batch_size is not None:
+            raise ValueError("provide only one, global_batch_size or local_batch_size")
+        global_batch_size = local_batch_size * world_size
+    elif global_batch_size is not None:
+        if global_batch_size % world_size != 0:
+            raise ValueError(
+                f"global batch size {global_batch_size} is not divisible by world size {world_size}"
+            )
+        local_batch_size = global_batch_size // world_size
+    else:
+        raise ValueError("expected either global_batch_size or local_batch_size")
+
+    return global_batch_size, local_batch_size
+
+
 def create_dataloader(
     params,
     logger,
@@ -978,9 +1001,10 @@ def create_dataloader(
     targets,
     features_noise,
     targets_noise,
+    ctx: distributed.DistributedContext,
+    *,
     features_transform_fn=None,
     base_seed: int = 0,
-    with_distributed: bool = False,
 ):
     """Creates a PyTorch dataset and dataloader from numpy arrays.
     Ref: https://pytorch.org/docs/stable/data.html
@@ -998,14 +1022,18 @@ def create_dataloader(
     features_sub_step = mode_data_params.get("features_sub_step")
     item_return_order = params["dataloader"]["item_return_order"]
 
+    _, local_batch_size = _resolve_batch_size(
+        ctx.world_size,
+        mode_data_params.get("global_batch_size") or mode_data_params.get("batch_size"),
+        mode_data_params.get("local_batch_size"),
+    )
+
     if mode.any(Mode.TRAIN | Mode.PROFILE):
         shuffle = True
         drop_last = True
-        batch_size = mode_data_params["train_batch_size"]
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         shuffle = False
         drop_last = False
-        batch_size = mode_data_params["eval_batch_size"]
         if 0 < features_sub_length and features_sub_begin_random:
             features_sub_begin_random = False
             assert features_sub_begin_sequence is None
@@ -1034,7 +1062,7 @@ def create_dataloader(
     )
 
     # create distributed data sampler (only for distributed training)
-    if with_distributed:
+    if ctx.is_distributed:
         sampler = distributed.sampler_create(
             dataset, shuffle=shuffle, base_seed=base_seed, drop_last=drop_last
         )
@@ -1046,7 +1074,7 @@ def create_dataloader(
     dataloader_config = DataLoaderConfig(
         shuffle=shuffle if sampler is None else False,
         drop_last=drop_last,
-        batch_size=batch_size,
+        batch_size=local_batch_size,
         param_num_workers=dataloader_params.get("num_workers"),
         param_prefetch_factor=dataloader_params.get("prefetch_factor"),
         param_pin_memory=torch.accelerator.is_available(),

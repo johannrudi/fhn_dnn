@@ -42,7 +42,7 @@ from data import (
 
 def run_evaluate(
     params: dict[str, Any],
-    device: torch.device,
+    ctx: distributed.DistributedContext,
     logger: logging.Logger,
 ) -> None:
     """Run prediction and optional evaluation for a DNN inverse map.
@@ -60,7 +60,7 @@ def run_evaluate(
     Args:
         params: Already-loaded configuration dict. Requires
             ``Mode.PREDICT`` or ``Mode.EVAL`` in ``params["runconfig"]["mode"]``.
-        device: Torch device from ``common.initialize_run``.
+        ctx: Distributed context from ``distributed.session``.
         logger: Logger from ``common.initialize_run``.
 
     Raises:
@@ -93,32 +93,34 @@ def run_evaluate(
         targets_noise_scale,
         features_transform_fn,
         train_input_transform_fn,
-    ) = common.load_and_preprocess_data(params, device, logger)
+    ) = common.load_and_preprocess_data(params, ctx.device, logger)
 
     # create train/validate and test dataloaders separately
     train_validate_dataloader: dict[str, DataLoader] = {
         key: create_dataloader(
-            params,
-            logging_get_logger("create_dataloader"),
-            Mode.EVAL,
+            params=params,
+            logger=logging_get_logger("create_dataloader"),
+            mode=Mode.EVAL,
             features=features[key],
             targets=targets[key],
             features_noise=features_noise[key],
             targets_noise=targets_noise[key],
             features_transform_fn=features_transform_fn,
+            ctx=ctx,
         )
         for key in ("train", "validate")
     }
     test_dataloader: dict[str, DataLoader] = {
         "test": create_dataloader(
-            params,
-            logging_get_logger("create_dataloader"),
-            Mode.EVAL,
+            params=params,
+            logger=logging_get_logger("create_dataloader"),
+            mode=Mode.EVAL,
             features=features["test"],
             targets=targets["test"],
             features_noise=features_noise["test"],
             targets_noise=targets_noise["test"],
             features_transform_fn=features_transform_fn,
+            ctx=ctx,
         )
     }
 
@@ -127,7 +129,7 @@ def run_evaluate(
     # <network>
 
     # create network once; weights are reloaded per checkpoint below
-    net = create_network(params, device, logging_get_logger("create_network"))
+    net = create_network(params, ctx.device, logging_get_logger("create_network"))
 
     # </network>
 
@@ -146,7 +148,7 @@ def run_evaluate(
     )
 
     for checkpoint_path in checkpoints:
-        epoch = checkpoint_load(checkpoint_path, net, map_location=device)
+        epoch = checkpoint_load(checkpoint_path, net, map_location=ctx.device)
 
         print(f"<evaluate_train_validate checkpoint={checkpoint_path}>")
         logger.info(
@@ -157,7 +159,7 @@ def run_evaluate(
         eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
             net,
             train_validate_dataloader,
-            device,
+            ctx.device,
             targets,
             targets_noise,
             targets_scale,
@@ -207,7 +209,7 @@ def run_evaluate(
     load_checkpoint = params["runconfig"].get("load_checkpoint")
     if load_checkpoint:
         test_checkpoint_path = self_dir / load_checkpoint
-        epoch = checkpoint_load(test_checkpoint_path, net, map_location=device)
+        epoch = checkpoint_load(test_checkpoint_path, net, map_location=ctx.device)
     else:
         test_checkpoint_path = common.find_latest_checkpoint(save_dir)
         assert test_checkpoint_path == checkpoint_path
@@ -220,7 +222,7 @@ def run_evaluate(
     eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
         net,
         test_dataloader,
-        device,
+        ctx.device,
         targets,
         targets_noise,
         targets_scale,
@@ -588,7 +590,7 @@ def main() -> None:
         parameters.save(params, save_dir=params["runconfig"]["save_dir"])
 
         # evaluate the network
-        run_evaluate(params, ctx.device, logger)
+        run_evaluate(params, ctx, logger)
 
 
 if __name__ == "__main__":
