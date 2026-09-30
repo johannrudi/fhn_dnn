@@ -11,10 +11,10 @@ import sys
 from typing import Any
 
 import common
+import dlk.mgmt.parameters as parameters
+import dlk.opt.distributed as distributed
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger
 from dlk.mode import Mode, get_mode_from_name
 from dlk.opt.compile import compile_net_from_params
@@ -35,19 +35,15 @@ AUTOCAST_DTYPES = {
 
 def run_train(
     params: dict[str, Any],
-    device: torch.device,
+    ctx: distributed.DistributedContext,
     logger: logging.Logger,
 ) -> None:
     """Run training for a DNN inverse map.
 
-    Builds its own device/logger via ``common.initialize_run`` when either is
-    omitted. When both are provided (e.g. by ``run.py``), logging setup is
-    skipped so a combined process keeps a single log-file set.
-
     Args:
         params: Already-loaded configuration dict. Requires
             ``Mode.TRAIN`` in ``params["runconfig"]["mode"]``.
-        device: Torch device from ``common.initialize_run``.
+        ctx: Distributed context from ``distributed.session``.
         logger: Logger from ``common.initialize_run``.
 
     Raises:
@@ -57,7 +53,8 @@ def run_train(
     self_dir = path_file.parent
     self_tag = f"{path_file.stem}_{path_file.suffix.lstrip('.')}"
 
-    print(f"<{self_tag}>")
+    if distributed.is_main_process():
+        print(f"<{self_tag}>")
 
     # get mode
     mode = get_mode_from_name(params["runconfig"]["mode"])
@@ -77,7 +74,7 @@ def run_train(
         _,
         features_transform_fn,
         train_input_transform_fn,
-    ) = common.load_and_preprocess_data(params, device, logger)
+    ) = common.load_and_preprocess_data(params, ctx.device, logger)
 
     # create training dataloader
     dataloader = create_dataloader(
@@ -89,6 +86,8 @@ def run_train(
         features_noise=features_noise["train"],
         targets_noise=targets_noise["train"],
         features_transform_fn=features_transform_fn,
+        base_seed=params["runconfig"].get("random_seed") or 0,
+        with_distributed=ctx.is_distributed,
     )
 
     # </data>
@@ -96,17 +95,26 @@ def run_train(
     # <network>
 
     # create network
-    net = create_network(params, device, logging_get_logger("create_network"))
+    net = create_network(params, ctx.device)
 
-    # resume from checkpoint when set
+    # resume from checkpoint when set (before wrapping for DDP)
     load_checkpoint = params["runconfig"].get("load_checkpoint")
     if load_checkpoint:
         checkpoint_path = self_dir / load_checkpoint
-        epoch = checkpoint_load(checkpoint_path, net, map_location=device)
+        epoch = checkpoint_load(checkpoint_path, net, map_location=ctx.device)
         logger.info(f"Resume at checkpoint: {checkpoint_path} (epoch {epoch})")
 
-    # compile the network (no-op unless enabled in the config)
+    # wrap for DDP (no-op unless distributed)
+    net = distributed.wrap_net(net, ctx.device)
+
+    # compile the network after wrapping for DDP (no-op unless enabled in the config)
     net = compile_net_from_params(net, params["training"].get("compile"))
+
+    # set mixed precision
+    autocast_dtype = params["training"].get("autocast_dtype")
+    if autocast_dtype:
+        autocast_dtype = AUTOCAST_DTYPES[autocast_dtype]
+        logger.info(f"Enable autocast with dtype={autocast_dtype}")
 
     # </network>
 
@@ -123,18 +131,11 @@ def run_train(
     # set loss function
     loss_fn = torch.nn.MSELoss()
 
-    # set mixed precision
-    autocast_dtype = params["training"].get("autocast_dtype")
-    if autocast_dtype:
-        autocast_dtype = AUTOCAST_DTYPES[autocast_dtype]
-        logger.info(f"Enable autocast with dtype={autocast_dtype}")
-
     # checkpointing for saving network weights
     checkpoint_dir = self_dir / params["runconfig"]["save_dir"] / "checkpoints"
     checkpoint_epochs = params["runconfig"]["save_checkpoints_epochs"]
 
     train_dlog: dict[str, Any] | None = None
-    time_train: float = np.nan
 
     if Mode.PROFILE in mode:
         from dlk.opt.profiler import profile_train_batches
@@ -147,14 +148,15 @@ def run_train(
             loss_fn,
         )
         train_batches_kwargs: dict[str, Any] = dict(
-            device=device,
+            device=ctx.device,
             inputs_transform_fn=train_input_transform_fn,
             autocast_dtype=autocast_dtype,
         )
         trace_dir = self_dir / params["runconfig"]["save_dir"] / "profile"
 
         # profile training
-        print("<train_profile>")
+        if distributed.is_main_process():
+            print("<train_profile>")
         profile_train_batches(
             train_batches,
             train_batches_args,
@@ -162,10 +164,12 @@ def run_train(
             skip_first=params["training"].get("profile_skip_first", 0),
             trace_dir=trace_dir,
         )
-        print("</train_profile>")
+        if distributed.is_main_process():
+            print("</train_profile>")
     else:
         # train network
-        print("<train>")
+        if distributed.is_main_process():
+            print("<train>")
         train_dlog = train_epochs(
             n_epochs=params["training"]["epochs"],
             net=net,
@@ -173,91 +177,98 @@ def run_train(
             optimizer=optimizer,
             loss_fn=loss_fn,
             lr_scheduler=lr_scheduler,
-            device=device,
+            device=ctx.device,
             inputs_transform_fn=train_input_transform_fn,
             checkpoint_epochs=checkpoint_epochs,
             checkpoint_dir=checkpoint_dir,
             autocast_dtype=autocast_dtype,
         )
-        time_train = train_dlog.get("time_train", np.nan)
-        print("</train>")
+        if distributed.is_main_process():
+            print("</train>")
 
     # </train>
 
     # <output>
 
-    show_plots = params["runconfig"].get("show_plots", False)
+    if distributed.is_main_process():
+        show_plots = params["runconfig"].get("show_plots", False)
 
-    # plot loss (skip for profile-only runs)
-    if train_dlog is not None:
-        path = self_dir / params["runconfig"]["save_dir"] / "loss"
-        plot_loss(
-            loss=train_dlog["loss_mean"],
-            path=path,
-            plot_name="Training loss",
-            n_epochs=params["training"]["epochs"],
-            loss_std=train_dlog["loss_std"],
-            x_offset=1,
-            y_scale="log",
-            close_plot=not show_plots,
-        )
+        # plot loss (skip for profile-only runs)
+        if train_dlog is not None:
+            path = self_dir / params["runconfig"]["save_dir"] / "loss"
+            plot_loss(
+                loss=train_dlog["loss_mean"],
+                path=path,
+                plot_name="Training loss",
+                n_epochs=params["training"]["epochs"],
+                loss_std=train_dlog["loss_std"],
+                x_offset=1,
+                y_scale="log",
+                close_plot=not show_plots,
+            )
 
-    # show plots
-    if show_plots:
-        plt.show()
-    else:
-        plt.close("all")
+        # show plots
+        if show_plots:
+            plt.show()
+        else:
+            plt.close("all")
 
     # </output>
 
-    print(f"</{self_tag}>")
+    if distributed.is_main_process():
+        print(f"</{self_tag}>")
 
 
 def main() -> None:
     """Parse CLI args, load params, and run training."""
-    # <params>
+    # initialize distributed parallelism
+    with distributed.session() as ctx:
 
-    parser = argparse.ArgumentParser()
-    config_params.add_args_to_parser(
-        parser,
-        default_params_path="configs/params_dnn.yaml",
-        default_mode="train",
-    )
-    args = parser.parse_args(sys.argv[1:])
+        # <params>
 
-    # load parameters from a file
-    params = config_params.load(args.params)
+        parser = argparse.ArgumentParser()
+        parameters.add_args_to_parser(
+            parser,
+            default_params_path="configs/params_dnn.yaml",
+            default_mode="train",
+        )
+        args = parser.parse_args(sys.argv[1:])
 
-    # set/override runconfig parameters from args
-    config_params.override_runconfig_from_args(params["runconfig"], args)
+        # load parameters from a file
+        params = parameters.load(args.params)
 
-    # override parameters from JSON and/or TOML inputs
-    config_params.override_params_from_args(params, args)
+        # set/override runconfig parameters from args
+        parameters.override_runconfig_from_args(params["runconfig"], args)
 
-    # </params>
+        # override parameters from JSON and/or TOML inputs
+        parameters.override_params_from_args(params, args)
 
-    # set the device/logger pair
-    device, logger = common.initialize_run(
-        pathlib.Path(__file__).parent,
-        pathlib.Path(__file__).stem,
-        params,
-    )
+        # </params>
 
-    # reject modes that belong to evaluate.py / run.py
-    mode = get_mode_from_name(params["runconfig"]["mode"])
-    allowed_modes = {Mode.TRAIN, Mode.TRAIN | Mode.PROFILE}
-    if mode not in allowed_modes:
-        raise ValueError(
-            f"train.py only allows modes 'train' and 'train_profile', "
-            f"got {mode} (--mode {params['runconfig']['mode']}). "
-            "Use evaluate.py for predict/eval, or run.py for combined modes."
+        # initialize
+        logger = common.initialize_run(
+            pathlib.Path(__file__).parent,
+            pathlib.Path(__file__).stem,
+            ctx,
+            params,
         )
 
-    # save parameters for reproducibility
-    config_params.save(params, save_dir=params["runconfig"]["save_dir"])
+        # reject modes that belong to evaluate.py / run.py
+        mode = get_mode_from_name(params["runconfig"]["mode"])
+        allowed_modes = {Mode.TRAIN, Mode.TRAIN | Mode.PROFILE}
+        if mode not in allowed_modes:
+            raise ValueError(
+                f"train.py only allows modes 'train' and 'train_profile', "
+                f"got {mode} (--mode {params['runconfig']['mode']}). "
+                "Use evaluate.py for predict/eval, or run.py for combined modes."
+            )
 
-    # train the network
-    run_train(params, device, logger)
+        # save parameters for reproducibility
+        if distributed.is_main_process():
+            parameters.save(params, save_dir=params["runconfig"]["save_dir"])
+
+        # train the network
+        run_train(params, ctx, logger)
 
 
 if __name__ == "__main__":

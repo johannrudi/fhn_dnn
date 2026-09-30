@@ -16,11 +16,12 @@ from collections.abc import Callable
 from typing import Any, Sized, cast
 
 import common
+import dlk.mgmt.parameters as parameters
+import dlk.opt.distributed as distributed
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.metrics as metrics
 import torch
-from dlk.mgmt import parameters as config_params
 from dlk.mgmt.log import logging_get_logger
 from dlk.mode import Mode, get_mode_from_name
 from dlk.opt.utils import checkpoint_load
@@ -55,9 +56,6 @@ def run_evaluate(
     - ``test``: one checkpoint (``runconfig.load_checkpoint`` when set,
       else ``common.find_latest_checkpoint``); plots stay at flat
       ``save_dir``.
-
-    Builds its own device/logger via ``common.initialize_run`` when either is
-    omitted.
 
     Args:
         params: Already-loaded configuration dict. Requires
@@ -540,49 +538,57 @@ def eval_data_vs_pred(
 
 def main() -> None:
     """Parse CLI args, load params, and run evaluation."""
-    # <params>
+    # evaluation runs single-process: the session only selects the device
+    with distributed.session() as ctx:
+        if ctx.is_distributed:
+            raise RuntimeError(
+                "evaluate.py runs single-process; launch it without torchrun/srun"
+            )
 
-    parser = argparse.ArgumentParser()
-    config_params.add_args_to_parser(
-        parser,
-        default_params_path="configs/params_dnn.yaml",
-        default_mode="eval",
-    )
-    args = parser.parse_args(sys.argv[1:])
+        # <params>
 
-    # load parameters from a file
-    params = config_params.load(args.params)
+        parser = argparse.ArgumentParser()
+        parameters.add_args_to_parser(
+            parser,
+            default_params_path="configs/params_dnn.yaml",
+            default_mode="eval",
+        )
+        args = parser.parse_args(sys.argv[1:])
 
-    # set/override runconfig parameters from args
-    config_params.override_runconfig_from_args(params["runconfig"], args)
+        # load parameters from a file
+        params = parameters.load(args.params)
 
-    # override parameters from JSON and/or TOML inputs
-    config_params.override_params_from_args(params, args)
+        # set/override runconfig parameters from args
+        parameters.override_runconfig_from_args(params["runconfig"], args)
 
-    # </params>
+        # override parameters from JSON and/or TOML inputs
+        parameters.override_params_from_args(params, args)
 
-    # set the device/logger pair
-    device, logger = common.initialize_run(
-        pathlib.Path(__file__).parent,
-        pathlib.Path(__file__).stem,
-        params,
-    )
+        # </params>
 
-    # reject modes that belong to train.py / run.py
-    mode = get_mode_from_name(params["runconfig"]["mode"])
-    allowed_modes = {Mode.PREDICT, Mode.EVAL}
-    if mode not in allowed_modes:
-        raise ValueError(
-            f"evaluate.py only allows modes 'predict' and 'eval', "
-            f"got {mode} (--mode {params['runconfig']['mode']}). "
-            "Use train.py for train/train_profile, or run.py for combined modes."
+        # initialize
+        logger = common.initialize_run(
+            pathlib.Path(__file__).parent,
+            pathlib.Path(__file__).stem,
+            ctx,
+            params,
         )
 
-    # save parameters for reproducibility
-    config_params.save(params, save_dir=params["runconfig"]["save_dir"])
+        # reject modes that belong to train.py / run.py
+        mode = get_mode_from_name(params["runconfig"]["mode"])
+        allowed_modes = {Mode.PREDICT, Mode.EVAL}
+        if mode not in allowed_modes:
+            raise ValueError(
+                f"evaluate.py only allows modes 'predict' and 'eval', "
+                f"got {mode} (--mode {params['runconfig']['mode']}). "
+                "Use train.py for train/train_profile, or run.py for combined modes."
+            )
 
-    # evaluate the network
-    run_evaluate(params, device, logger)
+        # save parameters for reproducibility
+        parameters.save(params, save_dir=params["runconfig"]["save_dir"])
+
+        # evaluate the network
+        run_evaluate(params, ctx.device, logger)
 
 
 if __name__ == "__main__":

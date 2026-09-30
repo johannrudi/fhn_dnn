@@ -8,11 +8,10 @@ import logging
 import os
 import pathlib
 import pprint
-import random
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
+import dlk.opt.distributed as distributed
 import torch
 from dlk.mgmt.log import logging_get_logger, logging_set_up
 from nets import create_ae
@@ -23,12 +22,13 @@ from data import load_data, preprocess_features, preprocess_targets
 def initialize_run(
     self_dir: pathlib.Path,
     self_name: str,
+    ctx: distributed.DistributedContext,
     params: dict[str, Any],
-) -> tuple[torch.device, logging.Logger]:
-    """Set compute device, random seed, and logging for one process.
+) -> logging.Logger:
+    """Set random seed, and logging for one process.
 
     Call exactly once per process. A combined ``run.py`` invocation builds
-    ``device``/``logger`` here and passes them into both ``run_train`` and
+    ``logger`` here and passes them into both ``run_train`` and
     ``run_evaluate`` so only one log-file set is created.
 
     Args:
@@ -41,22 +41,9 @@ def initialize_run(
             is absent, matching ``run_dnn.py``.
 
     Returns:
-        ``(device, logger)`` pair used by the rest of the run.
+        ``(logger)`` pair used by the rest of the run.
     """
     enable_debug = params["runconfig"].get("debug")
-
-    # check compute environment
-    cpu_logical_cores = os.cpu_count()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # fix random seed for reproducibility
-    random_seed = params["runconfig"].get("random_seed")
-    if random_seed is not None:
-        random.seed(random_seed)
-        np.random.seed(random_seed)
-        torch.manual_seed(random_seed)
-    else:
-        params["runconfig"]["random_seed"] = None
 
     # create the save_dir directory
     save_dir = self_dir / params["runconfig"]["save_dir"]
@@ -66,15 +53,23 @@ def initialize_run(
         raise ValueError(f"invalid path {save_dir}") from error
 
     # set up logging
-    logging_set_up(save_dir / self_name)
-    logger = logging_get_logger(self_name)
+    log_name = self_name if not ctx.is_distributed else f"{self_name}[{ctx.rank}]"
+    logging_set_up(save_dir / log_name)
+    logger = logging_get_logger(log_name)
 
     # log environment (Mode / Data key are logged by each caller)
-    logger.info(f"Environment - Directory:         {self_dir}")
-    logger.info(f"Environment - PyTorch version:   {torch.__version__}")
-    logger.info(f"Environment - CPU logical cores: {cpu_logical_cores}")
-    logger.info(f"Environment - Torch device:      {device}")
-    logger.info(f"Environment - Seed:              {random_seed}")
+    logger.info(f"ENV - Directory:              {self_dir}")
+    logger.info(f"ENV - PyTorch version:        {torch.__version__}")
+    logger.info(
+        f"ENV - Seed:                   {params['runconfig'].get('random_seed')}"
+    )
+    logger.info(f"ENV - Distributed:            {ctx.is_distributed}")
+    logger.info(f"ENV - World size:             {ctx.world_size}")
+    logger.info(f"ENV - CPU logical cores:      {os.cpu_count()}")
+    logger.info(f"ENV - Affinity-aware cores:   {len(os.sched_getaffinity(0))}")
+    logger.info(f"ENV - Torch threads intra-op: {torch.get_num_threads()}")
+    logger.info(f"ENV - Torch threads inter-op: {torch.get_num_interop_threads()}")
+    logger.info(f"ENV - Torch device:           {ctx.device}")
 
     # print parameters
     if enable_debug:
@@ -83,7 +78,14 @@ def initialize_run(
         pp.pprint(params)
         print("</parameters>")
 
-    return device, logger
+    # fix random seed for reproducibility
+    base_seed = params["runconfig"].get("random_seed")
+    if base_seed is not None:
+        distributed.seed_random_generators(base_seed)
+    else:
+        params["runconfig"]["random_seed"] = None
+
+    return logger
 
 
 def load_and_preprocess_data(

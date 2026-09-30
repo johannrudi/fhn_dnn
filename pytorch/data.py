@@ -7,6 +7,7 @@ import logging
 import os  # TODO: use pathlib instead
 import pathlib
 
+import dlk.opt.distributed as distributed
 import numpy as np
 import torch
 from dlk.data.loader import DataLoaderConfig
@@ -978,6 +979,8 @@ def create_dataloader(
     features_noise,
     targets_noise,
     features_transform_fn=None,
+    base_seed: int = 0,
+    with_distributed: bool = False,
 ):
     """Creates a PyTorch dataset and dataloader from numpy arrays.
     Ref: https://pytorch.org/docs/stable/data.html
@@ -997,9 +1000,11 @@ def create_dataloader(
 
     if mode.any(Mode.TRAIN | Mode.PROFILE):
         shuffle = True
+        drop_last = True
         batch_size = mode_data_params["train_batch_size"]
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         shuffle = False
+        drop_last = False
         batch_size = mode_data_params["eval_batch_size"]
         if 0 < features_sub_length and features_sub_begin_random:
             features_sub_begin_random = False
@@ -1028,11 +1033,19 @@ def create_dataloader(
         item_return_order=item_return_order,
     )
 
+    # create distributed data sampler (only for distributed training)
+    if with_distributed:
+        sampler = distributed.sampler_create(
+            dataset, shuffle=shuffle, base_seed=base_seed, drop_last=drop_last
+        )
+    else:
+        sampler = None
+
     # set arguments for dataloader
     dataloader_params = params["dataloader"]
     dataloader_config = DataLoaderConfig(
-        shuffle=shuffle,
-        drop_last=False,
+        shuffle=shuffle if sampler is None else False,
+        drop_last=drop_last,
         batch_size=batch_size,
         param_num_workers=dataloader_params.get("num_workers"),
         param_prefetch_factor=dataloader_params.get("prefetch_factor"),
@@ -1045,6 +1058,7 @@ def create_dataloader(
         dataset,
         batch_size=dataloader_config.batch_size,
         shuffle=dataloader_config.shuffle,
+        sampler=sampler,
         drop_last=dataloader_config.drop_last,
         num_workers=dataloader_config.num_workers,
         pin_memory=dataloader_config.pin_memory,
