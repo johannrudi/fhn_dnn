@@ -53,32 +53,24 @@ net:
 #       - [32, 32, 128, 32]
 #       - [32, 32, 128, 32]
 #       - [32, 32, 128, 32]
-#   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
+#   spectral_norm: False
 
 #   type: "ConvNet"
 #   conv_layer_kernel: 3
-#   conv_layer_sizes: [8, 16, 32]
+#   conv_layer_channels: [8, 16, 32]
 #   dense_layer_sizes: [128, 128, 128, 128]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
     type: "ConvResNet"
     conv_layer_kernel: 3
     conv_layer_padding: 1
-    conv_layer_sizes: [8, 8, 8]
+    conv_layer_channels: [8, 8, 8]
     residual_blocks_sizes:
         - [32, 32, 128, 32]
         - [32, 32, 128, 32]
         - [32, 32, 128, 32]
         - [32, 32, 128, 32]
-
-#   type: "EfficientNet"
-#   dropout: 0.0
-
-#   type: "TransformerNet"
-#   embedding_size: 128
-#   attention_layers_n_heads: [8, 8, 8, 8, 8, 8]
-#   patch_size: 50
-#   dropout: 0.0
+    spectral_norm: False
 
 optimizer:
     type: "AdamW"  # "Adam", "AdamW"

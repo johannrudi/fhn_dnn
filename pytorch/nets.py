@@ -8,11 +8,12 @@ import logging
 import math
 import pathlib
 
+import dlk.nets.efficientnet1d as efficientnet
 import torch
 import torch.nn as nn
 from dlk.nets.autoencoder import Autoencoder
 from dlk.nets.conv1d import ConvNet, ConvResNet
-from dlk.nets.efficientnet1d import EfficientNetV2B0Minimal
+from dlk.nets.efficientnet1d import EfficientNetV2BB0
 from dlk.nets.mlp import MLPNet, MLPNet_MultIn, MLPResNet
 from dlk.nets.transformer1d import ChannelWiseTransformerNet, TransformerNet
 from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
@@ -119,12 +120,12 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
     kernel = net_params.get("conv_layer_kernel", 3)
     stride = net_params.get("conv_layer_stride", 2)
     padding = net_params.get("conv_layer_padding", 0)
-    n_conv_layers = len(net_params["conv_layer_sizes"])
+    n_conv_layers = len(net_params["conv_layer_channels"])
     # set parameters of convolution layers
     hidden_conv_layers_kernels = n_conv_layers * [kernel]
     hidden_conv_layers_kwargs = {"stride": stride, "padding": padding}
     # calculate length of features after convolutional layers
-    n_channels = input_channels * net_params["conv_layer_sizes"][-1]
+    n_channels = input_channels * net_params["conv_layer_channels"][-1]
     n_features = input_size
     for _ in range(n_conv_layers):
         n_features = _get_conv1d_size(n_features, kernel, stride, padding)
@@ -134,7 +135,7 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
     return ConvNet(
         # convolutional layers
         input_channels,
-        hidden_conv_layers_channels_mult=net_params["conv_layer_sizes"],
+        hidden_conv_layers_channels_mult=net_params["conv_layer_channels"],
         hidden_conv_layers_kernels=hidden_conv_layers_kernels,
         hidden_conv_layers_activation=activation_fn,
         hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
@@ -165,7 +166,7 @@ def _create_convResNet(
     stride = net_params.get("conv_layer_stride", 2)
     padding = net_params.get("conv_layer_padding", 1)
     padding_mode = net_params.get("conv_layer_padding_mode", "replicate")
-    n_conv_layers = len(net_params["conv_layer_sizes"])
+    n_conv_layers = len(net_params["conv_layer_channels"])
     # set parameters of convolution block
     block_kwargs = dict(block_kwargs or {})
     block_kwargs["conv_kwargs"] = {
@@ -175,14 +176,14 @@ def _create_convResNet(
         **(block_kwargs.get("conv_kwargs") or {}),
     }
     conv_resnet_params = {
-        "channels_mult": net_params["conv_layer_sizes"],
+        "channels_mult": net_params["conv_layer_channels"],
         "kernels": n_conv_layers * [kernel],
         "dropout": dropout,
         "enable_spectral_norm": spectral_norm,
         "block_kwargs": block_kwargs,
     }
     # calculate length of features after convolutional layers
-    n_channels = input_channels * net_params["conv_layer_sizes"][-1]
+    n_channels = input_channels * net_params["conv_layer_channels"][-1]
     n_features = input_size
     for _ in range(n_conv_layers):
         n_features = _get_conv1d_size(n_features, kernel, stride, padding)
@@ -221,16 +222,28 @@ def _create_convResNet(
 
 def _create_efficientNet(input_channels, input_size, output_size, net_params, logger):
     dropout = net_params.get("dropout", 0.0)
+    spectral_norm = net_params.get("spectral_norm", False)
     logger.info(
         f"create EfficientNet({input_channels}, {input_size}, {output_size}, ...)"
     )
-    return EfficientNetV2B0Minimal(
-        input_channels=input_channels,
-        input_length=input_size,
-        num_classes=output_size,
-        dropout_connect=dropout,
-        dropout_head=dropout,
-    )
+    if spectral_norm:
+        return EfficientNetV2BB0(
+            input_channels=input_channels,
+            input_length=input_size,
+            num_classes=output_size,
+            block_dropout=dropout,
+            head=efficientnet.HeadConfig(dropout=dropout),
+            style=efficientnet.NET_EXACT_DW_SN_FLOORED_PRE_GN,
+        )
+    else:
+        return EfficientNetV2BB0(
+            input_channels=input_channels,
+            input_length=input_size,
+            num_classes=output_size,
+            block_dropout=dropout,
+            head=efficientnet.HeadConfig(dropout=dropout),
+            style=efficientnet.NET_BASELINE,
+        )
 
 
 def _create_transformerNet(input_channels, input_size, output_size, net_params, logger):
