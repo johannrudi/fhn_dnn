@@ -233,7 +233,7 @@ def _create_efficientNet(input_channels, input_size, output_size, net_params, lo
             num_classes=output_size,
             block_dropout=dropout,
             head=efficientnet.HeadConfig(dropout=dropout),
-            style=efficientnet.NET_EXACT_DW_SN_FLOORED_PRE_GN,
+            style=efficientnet.NET_SN_EFBN_SHGN,
         )
     else:
         return EfficientNetV2BB0(
@@ -242,7 +242,7 @@ def _create_efficientNet(input_channels, input_size, output_size, net_params, lo
             num_classes=output_size,
             block_dropout=dropout,
             head=efficientnet.HeadConfig(dropout=dropout),
-            style=efficientnet.NET_BASELINE,
+            style=efficientnet.NET_EFBN_SHGN,
         )
 
 
