@@ -80,11 +80,11 @@ python run_dnn.py
 ### Key Modules
 
 **pytorch/data.py**
-- Handles data loading for FitzHugh-Nagumo ODE outputs
-- Supports multiple feature types: `TIME`, `ODE_STATS`, `RATE_DURATION`, `NOISE`
+- Handles data loading for FitzHugh-Nagumo ODE outputs through the dataset's record files (`load_records`, `load_arrays`, `load_data`)
+- Supports multiple feature types: `TIME`, `TIME_NOISE`, `ODE_STATS`, `RATE_DURATION`, `NOISE`
 - Implements custom PyTorch `Dataset` (`FHN_Dataset`) with data augmentation
-- Handles both memmap and numpy array loading for large datasets
-- Preprocessing: normalization, scaling, noise injection
+- Loads arrays memory-mapped; the 2020 dataset (one file per column) has its own loader
+- Preprocessing: scaling with the scales stored in the records, noise injection
 
 **pytorch/nets.py**
 - Neural network architectures for inverse maps
@@ -126,7 +126,8 @@ All experiments are configured via YAML files in `pytorch/configs/`:
 - `params_unet.yaml` - U-Net configuration
 
 **Key configuration sections:**
-- `data`: dataset paths, feature/target types, normalization, batch sizes
+- `data`: options shared by training and evaluation: `data_dir`, feature/target types, channel and length ranges, sub-interval length and step, normalization flags, subset sizes `Ntrain`/`Nvalidation`/`Ntest`
+- `data_train`, `data_evaluate`: only what differs between the modes: batch sizes, `features_sub_begin_random`/`features_sub_begin_sequence`, `features_additive_noise_std`. `load_data` raises if a shared key appears here, and if a config still uses the old name `Nvalidate`.
 - `net`: network architecture, layer sizes, activation functions
 - `optimizer`: optimizer type, learning rate, scheduler settings
 - `training`: number of epochs
@@ -134,9 +135,9 @@ All experiments are configured via YAML files in `pytorch/configs/`:
 
 ## Data Pipeline
 
-1. **Load**: Load numpy arrays or memmap files from `data/` directory
-2. **Split**: Separate into train/validate/test sets
-3. **Preprocess**: Apply normalization and optional transformations
+1. **Load**: Read the record files in `data_dir` (`fhn_record*.json`; `ar1_record*.json` when noise is used) and load the arrays they list, memory-mapped. The current dataset is `../../generated_data/fhn/2026-10-11`; `data/2020-12-09` has hand-written records. There is no `file_names` option.
+2. **Split**: Cut the train/validation/test subsets: the first `Ntrain` and last `Nvalidation` rows of the train split, the first `Ntest` rows of the test split
+3. **Preprocess**: Scale with the record's scales when `features_normalize`/`targets_normalize` are set, and apply optional transformations
 4. **Augment**: Add noise, subsample time series (optional)
 5. **DataLoader**: Create PyTorch DataLoader with batching
 

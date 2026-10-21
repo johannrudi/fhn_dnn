@@ -203,15 +203,15 @@ def plot_metrics_vs_checkpoint(
     mse_train,
     mae_train,
     r2_train,
-    mse_validate,
-    mae_validate,
-    r2_validate,
+    mse_validation,
+    mae_validation,
+    r2_validation,
     path,
     save_txt=True,
     save_plot=True,
     close_plot=True,
 ):
-    """Plot overall MSE/MAE/R2 vs checkpoint epoch for train and validate.
+    """Plot overall MSE/MAE/R2 vs checkpoint epoch for train and validation.
 
     Draws both splits on shared axes (different color and marker) with a
     legend. MSE and MAE use log y-scale; R2 is limited to ``[0, 1]``. Writes
@@ -222,9 +222,9 @@ def plot_metrics_vs_checkpoint(
         mse_train: Overall train MSE scalar per checkpoint.
         mae_train: Overall train MAE scalar per checkpoint.
         r2_train: Overall train R2 scalar per checkpoint.
-        mse_validate: Overall validate MSE scalar per checkpoint.
-        mae_validate: Overall validate MAE scalar per checkpoint.
-        r2_validate: Overall validate R2 scalar per checkpoint.
+        mse_validation: Overall validation MSE scalar per checkpoint.
+        mae_validation: Overall validation MAE scalar per checkpoint.
+        r2_validation: Overall validation R2 scalar per checkpoint.
         path: Output path stem (no extension); writes ``.txt`` and/or ``.pdf``.
         save_txt: Write the raw column dump when True.
         save_plot: Write the PDF figure when True.
@@ -232,7 +232,7 @@ def plot_metrics_vs_checkpoint(
     """
     n = len(epochs)
     assert n == len(mse_train) == len(mae_train) == len(r2_train)
-    assert n == len(mse_validate) == len(mae_validate) == len(r2_validate)
+    assert n == len(mse_validation) == len(mae_validation) == len(r2_validation)
 
     # save raw metrics (both splits)
     if save_txt:
@@ -244,19 +244,19 @@ def plot_metrics_vs_checkpoint(
                     mse_train,
                     mae_train,
                     r2_train,
-                    mse_validate,
-                    mae_validate,
-                    r2_validate,
+                    mse_validation,
+                    mae_validation,
+                    r2_validation,
                 ),
                 axis=-1,
             ),
-            header="epoch mse_train mae_train r2_train mse_validate mae_validate r2_validate",
+            header="epoch mse_train mae_train r2_train mse_validation mae_validation r2_validation",
         )
 
-    # series style: train vs validate
+    # series style: train vs validation
     series = (
         ("train", (mse_train, mae_train, r2_train), "o-", "C0"),
-        ("validate", (mse_validate, mae_validate, r2_validate), "s--", "C1"),
+        ("validation", (mse_validation, mae_validation, r2_validation), "s--", "C1"),
     )
     panel_titles = ("MSE", "MAE", "R2")
     n_plots = len(panel_titles)

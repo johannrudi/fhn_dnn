@@ -53,7 +53,7 @@ def run_evaluate(
 
     Two independent passes share one network and the same low-level helpers:
 
-    - ``train``/``validate``: every checkpoint under ``runconfig.save_dir``
+    - ``train``/``validation``: every checkpoint under ``runconfig.save_dir``
       via ``common.find_all_checkpoints``; plots go under
       ``save_dir/checkpoints_eval/<stem>/``; metrics-vs-checkpoint plots
       are written when ``Mode.EVAL`` is set.
@@ -99,8 +99,8 @@ def run_evaluate(
     ) = common.load_and_preprocess_data(params, ctx.device, logger)
     data_params = params["data"]
 
-    # create train/validate and test dataloaders separately
-    train_validate_dataloader: dict[SubsetName, DataLoader] = {
+    # create train/validation and test dataloaders separately
+    train_validation_dataloader: dict[SubsetName, DataLoader] = {
         key: create_dataloader(
             params=params,
             logger=logging_get_logger("create_dataloader"),
@@ -112,7 +112,7 @@ def run_evaluate(
             features_transform_fn=features_transform_fn,
             ctx=ctx,
         )
-        for key in ("train", "validate")
+        for key in ("train", "validation")
     }
     test_dataloader: dict[SubsetName, DataLoader] = {
         "test": create_dataloader(
@@ -140,29 +140,29 @@ def run_evaluate(
     save_dir = self_dir / params["runconfig"]["save_dir"]
     show_plots = params["runconfig"].get("show_plots", False)
 
-    # <evaluate_train_validate>
+    # <evaluate_train_validation>
 
     checkpoints = common.find_all_checkpoints(save_dir)
     metrics_by_epoch: dict[str, dict[str, list]] = {
         "train": {"epoch": [], "mse": [], "mae": [], "r2": []},
-        "validate": {"epoch": [], "mse": [], "mae": [], "r2": []},
+        "validation": {"epoch": [], "mse": [], "mae": [], "r2": []},
     }
-    n_samples_train_validate = sum(
-        len(cast(Sized, dl.dataset)) for dl in train_validate_dataloader.values()
+    n_samples_train_validation = sum(
+        len(cast(Sized, dl.dataset)) for dl in train_validation_dataloader.values()
     )
 
     for checkpoint_path in checkpoints:
         epoch = checkpoint_load(checkpoint_path, net, map_location=ctx.device)
 
-        print(f"<evaluate_train_validate checkpoint={checkpoint_path}>")
+        print(f"<evaluate_train_validation checkpoint={checkpoint_path}>")
         logger.info(
-            f"Evaluate checkpoint {checkpoint_path} (epoch {epoch}) for train/validate"
+            f"Evaluate checkpoint {checkpoint_path} (epoch {epoch}) for train/validation"
         )
         tag = f" [{checkpoint_path.stem}]"
 
         eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
             net,
-            train_validate_dataloader,
+            train_validation_dataloader,
             ctx.device,
             targets,
             targets_noise,
@@ -170,12 +170,12 @@ def run_evaluate(
             data_params,
             train_input_transform_fn,
         )
-        _log_runtime(logger, time_eval, n_samples_train_validate, tag=tag)
+        _log_runtime(logger, time_eval, n_samples_train_validation, tag=tag)
         split_metrics = _log_eval_metrics(
             eval_targets_data, eval_targets_pred, mode, logger, tag=tag
         )
         if split_metrics is not None:
-            for key in ("train", "validate"):
+            for key in ("train", "validation"):
                 metrics_by_epoch[key]["epoch"].append(epoch)
                 metrics_by_epoch[key]["mse"].append(split_metrics[key]["mse"])
                 metrics_by_epoch[key]["mae"].append(split_metrics[key]["mae"])
@@ -188,9 +188,9 @@ def run_evaluate(
             close_plot=not show_plots,
         )
 
-        print(f"</evaluate_train_validate>")
+        print(f"</evaluate_train_validation>")
 
-    # aggregate MSE/MAE/R2 vs checkpoint epoch (train + validate on one figure)
+    # aggregate MSE/MAE/R2 vs checkpoint epoch (train + validation on one figure)
     # NOTE: Do not plot the first entry, which is epoch=0 with high errors.
     if Mode.EVAL in mode and checkpoints:
         plot_metrics_vs_checkpoint(
@@ -198,14 +198,14 @@ def run_evaluate(
             metrics_by_epoch["train"]["mse"][1:],
             metrics_by_epoch["train"]["mae"][1:],
             metrics_by_epoch["train"]["r2"][1:],
-            metrics_by_epoch["validate"]["mse"][1:],
-            metrics_by_epoch["validate"]["mae"][1:],
-            metrics_by_epoch["validate"]["r2"][1:],
+            metrics_by_epoch["validation"]["mse"][1:],
+            metrics_by_epoch["validation"]["mae"][1:],
+            metrics_by_epoch["validation"]["r2"][1:],
             save_dir / "metrics_vs_checkpoint",
             close_plot=not show_plots,
         )
 
-    # </evaluate_train_validate>
+    # </evaluate_train_validation>
 
     # <evaluate_test>
 

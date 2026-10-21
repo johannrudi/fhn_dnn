@@ -94,7 +94,7 @@ def run(args, params):
     if ModeKeys.TRAIN == mode:
         mode_to_data_key = "train"
     elif ModeKeys.VALIDATE == mode:
-        mode_to_data_key = "validate"
+        mode_to_data_key = "validation"
     elif ModeKeys.EVAL == mode:
         mode_to_data_key = "test"
     else:

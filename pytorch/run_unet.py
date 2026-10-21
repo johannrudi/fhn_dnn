@@ -167,7 +167,7 @@ def run(args, params):
     # create dataloaders
     dataloader_eval = dict()
     for key, dl_mode in zip(
-        ["train", "validate", "test"],
+        ["train", "validation", "test"],
         [ModeKeys.TRAIN, ModeKeys.VALIDATE, ModeKeys.EVAL],
     ):
         dataloader_eval[key] = create_dataloader(
@@ -200,7 +200,7 @@ def run(args, params):
     eval_mse = dict()
     eval_mae = dict()
     eval_r2 = dict()
-    for key in ["train", "validate", "test"]:
+    for key in ["train", "validation", "test"]:
         y_data = features[key].squeeze()
         y_pred = features_predict[key].squeeze()
         eval_mse[key] = metrics.mean_squared_error(y_data, y_pred)
@@ -259,7 +259,7 @@ def run(args, params):
 
     # plot predictions percentiles
     timesteps = load_timesteps(params)
-    for key in ["train", "validate", "test"]:
+    for key in ["train", "validation", "test"]:
         m = len(percentiles)
         fig, ax = plt.subplots(m, 1, figsize=(10, 2 * m))
         y_lim = [

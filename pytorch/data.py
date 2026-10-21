@@ -20,7 +20,7 @@ from typing_extensions import TypeIs
 DataKind = Literal["params", "states", "stats"]
 
 # name of a subset cut from the splits
-SubsetName = Literal["train", "validate", "test"]
+SubsetName = Literal["train", "validation", "test"]
 
 # ---------------------------------------
 # DictArray
@@ -32,14 +32,14 @@ DictArray = dict[SubsetName, np.ndarray] | dict[SubsetName, None]
 
 def dictarray_empty() -> dict[SubsetName, None]:
     """Dictarray without arrays."""
-    return {"train": None, "validate": None, "test": None}
+    return {"train": None, "validation": None, "test": None}
 
 
 def dictarray_set(
-    arr_train: np.ndarray, arr_validate: np.ndarray, arr_test: np.ndarray
+    arr_train: np.ndarray, arr_validation: np.ndarray, arr_test: np.ndarray
 ) -> dict[SubsetName, np.ndarray]:
-    """Dictarray of the train, validate, and test subsets."""
-    return {"train": arr_train, "validate": arr_validate, "test": arr_test}
+    """Dictarray of the train, validation, and test subsets."""
+    return {"train": arr_train, "validation": arr_validation, "test": arr_test}
 
 
 def dictarray_is_none(
@@ -49,7 +49,7 @@ def dictarray_is_none(
     return (
         arrays is None
         or arrays["train"] is None
-        or arrays["validate"] is None
+        or arrays["validation"] is None
         or arrays["test"] is None
     )
 
@@ -141,19 +141,19 @@ def _load_splits_data2020(
 def _get_subset_slices(
     n_train_split: int,
     Ntrain: int,
-    Nvalidate: int,
+    Nvalidation: int,
     Ntest: int | None,
 ) -> tuple[slice, slice, slice]:
-    """Rows of the train, validate, and test subsets within their splits.
+    """Rows of the train, validation, and test subsets within their splits.
 
     The train subset is the first `Ntrain` rows of the train split and the
-    validate subset is its last `Nvalidate` rows, so the two never overlap.
+    validation subset is its last `Nvalidation` rows, so the two never overlap.
     The test subset is the first `Ntest` rows of the test split, or all of
     them when `Ntest` is None.
     """
     return (
         slice(0, Ntrain),
-        slice(n_train_split - Nvalidate, n_train_split),
+        slice(n_train_split - Nvalidation, n_train_split),
         slice(0, Ntest),
     )
 
@@ -161,17 +161,17 @@ def _get_subset_slices(
 def _partition_splits(
     splits: dict[str, np.ndarray],
     Ntrain: int,
-    Nvalidate: int,
+    Nvalidation: int,
     Ntest: int | None,
 ) -> dict[SubsetName, np.ndarray]:
-    """Cut the train/validate/test subsets from the train and test splits."""
+    """Cut the train/validation/test subsets from the train and test splits."""
     assert "train" in splits and "test" in splits
     n_train_split = splits["train"].shape[0]
     n_test_split = splits["test"].shape[0]
 
-    if Ntrain + Nvalidate > n_train_split:
+    if Ntrain + Nvalidation > n_train_split:
         raise ValueError(
-            f"Ntrain + Nvalidate = {Ntrain + Nvalidate} exceeds the"
+            f"Ntrain + Nvalidation = {Ntrain + Nvalidation} exceeds the"
             f" {n_train_split} samples of the train split"
         )
     if Ntest is not None and Ntest > n_test_split:
@@ -179,10 +179,12 @@ def _partition_splits(
             f"Ntest = {Ntest} exceeds the {n_test_split} samples of the test split"
         )
 
-    train, validate, test = _get_subset_slices(n_train_split, Ntrain, Nvalidate, Ntest)
+    train, validation, test = _get_subset_slices(
+        n_train_split, Ntrain, Nvalidation, Ntest
+    )
     return dictarray_set(
         splits["train"][train],
-        splits["train"][validate],
+        splits["train"][validation],
         splits["test"][test],
     )
 
@@ -254,7 +256,7 @@ def load_arrays(
         raise ValueError(f"unknown {targets_type=}")
     data_dir = pathlib.Path(data_params["data_dir"])
     Ntrain = data_params["Ntrain"]
-    Nvalidate = data_params.get("Nvalidate") or 0
+    Nvalidation = data_params.get("Nvalidation") or 0
     Ntest = data_params.get("Ntest")
 
     def load_and_partition(
@@ -271,7 +273,7 @@ def load_arrays(
             f"{record['factory']} {kind} via {load_splits.__name__}: {_shape_to_str(splits)}"
         )
         # create the dictarray for the dataset
-        return _partition_splits(splits, Ntrain, Nvalidate, Ntest)
+        return _partition_splits(splits, Ntrain, Nvalidation, Ntest)
 
     # initialize dictarrays
     features: DictArray = dictarray_empty()
@@ -321,13 +323,22 @@ _DATA_ONLY_KEYS = (
     "features_sub_length",
     "features_sub_step",
     "Ntrain",
-    "Nvalidate",
+    "Nvalidation",
     "Ntest",
 )
 
 
+# old names of keys
+_RENAMED_KEYS = {"Nvalidate": "Nvalidation"}
+
+
 def _check_data_only_keys(params: dict[str, Any]) -> None:
-    """Raise if a key of the `data` block is set in `data_train` or `data_evaluate`."""
+    """Raise if a key of the `data` block is set in `data_train` or `data_evaluate`,
+    or if a key still has its old name."""
+    for block in ("data", "data_train", "data_evaluate"):
+        for old, new in _RENAMED_KEYS.items():
+            if old in params.get(block, {}):
+                raise ValueError(f"rename `{old}` to `{new}` in `{block}`")
     for block in ("data_train", "data_evaluate"):
         misplaced = [key for key in _DATA_ONLY_KEYS if key in params.get(block, {})]
         if misplaced:
@@ -416,7 +427,7 @@ def load_data(
     # print sample sizes (as `load_arrays` reads them; no `Ntest` means all)
     Ntest = data_params.get("Ntest")
     logger.info(f"Ntrain:    {data_params['Ntrain']}")
-    logger.info(f"Nvalidate: {data_params.get('Nvalidate') or 0}")
+    logger.info(f"Nvalidation: {data_params.get('Nvalidation') or 0}")
     logger.info(f"Ntest:     {Ntest if Ntest is not None else 'all'}")
 
     # print data shapes
@@ -600,19 +611,6 @@ def get_targets_scale(
 # Representative Samples
 # ---------------------------------------
 
-# TODO: Rename the subset "validate" to "validation", as the records name it.
-#   - Code: the dictarray key "validate" and the variables named after it in
-#     data.py (dictarray_empty, dictarray_set, dictarray_is_none, the Nvalidate
-#     log line), this file, evaluate.py (dataloader and metrics keys), run_ae.py
-#     (mode_to_data_key), run_unet.py (key lists), and _prototype/; for
-#     consistent naming also plot_utils.py (parameter names, legend label, and
-#     the column header of the metrics file it writes). `Mode.VALIDATE` comes
-#     from dlk and stays.
-#   - Configs: the key `Nvalidate` -> `Nvalidation` in configs/params_ae.yaml
-#     and configs/params_dnn.yaml. Do not change any files in runs/.
-#   - Then drop the mapping to `record_subset` in get_conditional_positions
-#     and use `subset_name` directly; rename the word in `SubsetName` too.
-
 
 def get_conditional_positions(
     record: dict[str, Any],
@@ -623,33 +621,32 @@ def get_conditional_positions(
 
     The record lists representative samples by row of a split, for each of
     its own subsets. Those of the record's subset with the same name are
-    taken; as the subsets cut by `Ntrain`, `Nvalidate`, and `Ntest` need not
+    taken; as the subsets cut by `Ntrain`, `Nvalidation`, and `Ntest` need not
     match the record's, only the rows inside the subset are kept, counted
     from the subset's first row.
     """
     n_train_split = record["config"]["splits"]["train"]
     n_test_split = record["config"]["splits"]["test"]
-    train, validate, test = _get_subset_slices(
+    train, validation, test = _get_subset_slices(
         n_train_split,
         data_params["Ntrain"],
-        data_params.get("Nvalidate") or 0,
+        data_params.get("Nvalidation") or 0,
         data_params.get("Ntest"),
     )
 
     # rows of the subset within its split
     if subset_name == "train":
         rows = range(n_train_split)[train]
-    elif subset_name == "validate":
-        rows = range(n_train_split)[validate]
+    elif subset_name == "validation":
+        rows = range(n_train_split)[validation]
     elif subset_name == "test":
         rows = range(n_test_split)[test]
     else:
         assert_never(subset_name)
 
     # keep the representative rows that fall in the subset
-    record_subset = "validation" if subset_name == "validate" else subset_name
     positions = []
-    for row in record["index_sets"][record_subset]["representative"]["rows"]:
+    for row in record["index_sets"][subset_name]["representative"]["rows"]:
         if row in rows:
             positions.append(row - rows.start)
     return np.array(positions, dtype=np.int64)

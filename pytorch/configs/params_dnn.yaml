@@ -11,9 +11,9 @@ data:  # options shared by training and evaluation
     targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
     features_normalize: False       # scale features to have zero mean and unit std
     targets_normalize: False        # scale targets to have zero mean and unit std
-    Ntrain:    1024
-    Nvalidate: 1000
-    Ntest:     2000
+    Ntrain:      1024
+    Nvalidation: 1000
+    Ntest:       2000
     # use encoder network of an autoencoder
     # autoencoder_load_dir: 'runs/ae'
     # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
