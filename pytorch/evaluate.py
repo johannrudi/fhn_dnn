@@ -98,6 +98,7 @@ def run_evaluate(
         train_input_transform_fn,
     ) = common.load_and_preprocess_data(params, ctx.device, logger)
     data_params = params["data"]
+    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
 
     # create train/validation and test dataloaders separately
     train_validation_dataloader: dict[SubsetName, DataLoader] = {
@@ -172,7 +173,12 @@ def run_evaluate(
         )
         _log_runtime(logger, time_eval, n_samples_train_validation, tag=tag)
         split_metrics = _log_eval_metrics(
-            eval_targets_data, eval_targets_pred, mode, logger, tag=tag
+            eval_targets_data,
+            eval_targets_pred,
+            mode,
+            logger,
+            tag=tag,
+            sub_begin_sequence=sub_begin_sequence,
         )
         if split_metrics is not None:
             for key in ("train", "validation"):
@@ -236,7 +242,14 @@ def run_evaluate(
     _log_runtime(
         logger, time_eval, len(cast(Sized, test_dataloader["test"].dataset)), tag=""
     )
-    _log_eval_metrics(eval_targets_data, eval_targets_pred, mode, logger, tag="")
+    _log_eval_metrics(
+        eval_targets_data,
+        eval_targets_pred,
+        mode,
+        logger,
+        tag="",
+        sub_begin_sequence=sub_begin_sequence,
+    )
     _plot_predictions(
         eval_targets_data,
         eval_targets_pred,
@@ -320,6 +333,7 @@ def _log_eval_metrics(
     mode: Mode,
     logger: logging.Logger,
     tag: str = "",
+    sub_begin_sequence: list[int] | None = None,
 ) -> dict[str, dict[str, float]] | None:
     """Log MSE/MAE/R2 per split when ``Mode.EVAL`` is set.
 
@@ -330,6 +344,8 @@ def _log_eval_metrics(
         logger: Logger for the metric lines.
         tag: Optional suffix after the split name (e.g. ``" [net_e0040]"``).
             Empty string keeps the untagged ``test``-path format.
+        sub_begin_sequence: ``data_evaluate.features_sub_begin_sequence``;
+            when set, the metrics are also logged per sub-interval begin.
 
     Returns:
         ``None`` when ``Mode.EVAL`` is not in ``mode``; otherwise
@@ -359,7 +375,63 @@ def _log_eval_metrics(
             "r2": eval_r2[key],
         }
 
+    # compute evaluation metrics per sub-interval begin
+    for key in eval_targets_data.keys():
+        groups, group_labels = _sub_begin_groups(
+            sub_begin_sequence, eval_targets_data[key].shape[0]
+        )
+        if groups is None or group_labels is None:
+            continue
+        for g, label in enumerate(group_labels):
+            mask = groups == g
+            g_mse, g_mae, g_r2 = eval_data_vs_pred(
+                {key: eval_targets_data[key][mask]},
+                {key: eval_targets_pred[key][mask]},
+            )
+            logger.info(
+                f"MSE ({key}, {label}){tag}:      "
+                + str(g_mse[key + "_i"])
+                + f" {g_mse[key]}"
+            )
+            logger.info(
+                f"MAE ({key}, {label}){tag}:      "
+                + str(g_mae[key + "_i"])
+                + f" {g_mae[key]}"
+            )
+            logger.info(
+                f"R2 score ({key}, {label}){tag}: "
+                + str(g_r2[key + "_i"])
+                + f" {g_r2[key]}"
+            )
+
     return split_metrics
+
+
+def _sub_begin_groups(
+    sub_begin_sequence: list[int] | None,
+    n_samples: int,
+) -> tuple[np.ndarray | None, list[str] | None]:
+    """Group index and label of each eval sample by its sub-interval begin.
+
+    With ``features_sub_begin_sequence`` set, the eval dataset holds one
+    contiguous block per begin (``FHN_Dataset.__getitem__`` maps index ``i``
+    to begin ``i // dataset_size``), and the eval dataloader keeps that order.
+
+    Args:
+        sub_begin_sequence: ``data_evaluate.features_sub_begin_sequence``.
+        n_samples: Number of predicted samples of one split.
+
+    Returns:
+        ``(groups, group_labels)``: the group index per sample and one label
+        per begin, or ``(None, None)`` without a sequence or samples.
+    """
+    if not sub_begin_sequence or n_samples == 0:
+        return None, None
+    n_groups = len(sub_begin_sequence)
+    assert n_samples % n_groups == 0, f"{n_samples=} not a multiple of {n_groups=}"
+    groups = np.arange(n_samples) // (n_samples // n_groups)
+    group_labels = [f"begin={k}" for k in sub_begin_sequence]
+    return groups, group_labels
 
 
 def _log_runtime(
@@ -401,6 +473,7 @@ def _plot_predictions(
             save (batch runs), False keeps figures open for ``plt.show()``.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
 
     # plot predictions
     for key in eval_targets_data.keys():
@@ -415,6 +488,10 @@ def _plot_predictions(
         plot_targets_data = [eval_targets_data[key][:, i] for i in range(ntrg)]
         plot_targets_pred = [eval_targets_pred[key][:, i] for i in range(ntrg)]
         plot_name = [f"param_{i}" for i in range(ntrg)]
+        # color by sub-interval begin
+        groups, group_labels = _sub_begin_groups(
+            sub_begin_sequence, eval_targets_data[key].shape[0]
+        )
         # plot true values vs. predictions
         path = output_dir / f"data_vs_predict_{key}"
         plot_data_vs_predict(
@@ -424,6 +501,8 @@ def _plot_predictions(
             plot_name=plot_name,
             x_label=ntrg * [f"{key} value"],
             y_label=ntrg * ["predicted value"],
+            groups=groups,
+            group_labels=group_labels,
             close_plot=close_plot,
         )
         # plot prediction errors
@@ -435,6 +514,8 @@ def _plot_predictions(
             plot_name=plot_name,
             x_label=ntrg * [f"{key} value"],
             y_label=ntrg * ["prediction error"],
+            groups=groups,
+            group_labels=group_labels,
             close_plot=close_plot,
         )
 

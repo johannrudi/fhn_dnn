@@ -4,6 +4,25 @@ Plotting
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
+
+
+def _scatter_groups(ax, x, y, groups, group_labels, s=2**2, alpha=0.5):
+    """Scatter plot with one categorical color per group and a legend.
+
+    Draws all points in one call, in a fixed random order, so that no group is
+    hidden behind the groups drawn after it.
+    """
+    assert len(x) == len(y) == len(groups)
+    order = np.random.default_rng(0).permutation(len(x))
+    colors = [f"C{g % 10}" for g in groups[order]]
+    sc = ax.scatter(x[order], y[order], c=colors, s=s, alpha=alpha)
+    handles = [
+        Line2D([], [], marker="o", linestyle="", color=f"C{g % 10}", label=label)
+        for g, label in enumerate(group_labels)
+    ]
+    ax.legend(handles=handles, fontsize="small")
+    return sc
 
 
 def plot_loss(
@@ -38,25 +57,23 @@ def plot_loss(
         )
     else:
         ax.plot(loss, "k-")
-    # set up x-axis
+    # set up x-axis and its labels
     ax.set_xlim((x_offset, len(loss)))
     if x_twin:
         ax_twin = ax.twiny()
         ax_twin.set_xlim((x_offset, n_epochs))
+        ax.set_xlabel("logged step")
+        ax_twin.set_xlabel("epoch")
     else:
         xticks = ax.get_xticks()
         xticks_scaled = xticks * (n_epochs / (len(loss) + x_offset - 1))
         xticklabels = np.char.mod("%g", xticks_scaled)
         ax.set_xticks(xticks, labels=xticklabels)
         ax.set_xlim((-0.5, len(loss)))
+        ax.set_xlabel("epoch")
     # set up y-axis
     ax.set_yscale(y_scale)
-    # set labels
-    if x_twin:
-        ax.set_xlabel("logged step")
-        ax_twin.set_xlabel("epoch")
-    else:
-        ax.set_xlabel("epoch")
+    # set title
     ax.set_title(plot_name)
     # set other
     ax.grid()
@@ -68,8 +85,8 @@ def plot_loss(
 
 
 def plot_data_vs_qoi(
-    data: list,
-    predict: list,
+    data: list[np.ndarray],
+    predict: list[np.ndarray],
     path,
     save_txt=True,
     save_plot=True,
@@ -78,15 +95,24 @@ def plot_data_vs_qoi(
     y_label=None,
     line_x=None,
     line_y=None,
+    groups=None,
+    group_labels=None,
     close_plot=True,
 ):
-    """Plots a list of quantities as scatter plots. Saves raw numbers to files."""
+    """Plots a list of quantities as scatter plots. Saves raw numbers to files.
+
+    If `groups` (one integer group index per sample) and `group_labels` (one
+    label per group) are given, the points are colored by group and the text
+    files get the group index as a third column.
+    """
     assert len(data) == len(predict)
+    assert (groups is None) == (group_labels is None)
     if save_txt:
         for i, (x_, y_) in enumerate(zip(data, predict)):
-            np.savetxt(
-                f"{path}_{i}.txt", np.stack((x_.squeeze(), y_.squeeze()), axis=-1)
-            )
+            columns = [x_.squeeze(), y_.squeeze()]
+            if groups is not None:
+                columns.append(groups)
+            np.savetxt(f"{path}_{i}.txt", np.stack(columns, axis=-1))
     # set defaults
     if plot_name is None:
         plot_name = len(data) * [""]
@@ -94,16 +120,21 @@ def plot_data_vs_qoi(
         x_label = len(data) * ["data"]
     if y_label is None:
         y_label = len(data) * ["qoi"]
+    # set the reference line apart from the group colors
+    line_color = "tab:orange" if groups is None else "black"
     # create plot
     n_plots = len(data)
     fig, ax = plt.subplots(1, n_plots, figsize=(4 * n_plots, 3))
     if n_plots == 1:
         ax = [ax]
     for i, (x_, y_) in enumerate(zip(data, predict)):
-        ax[i].scatter(x_, y_, s=2**2, alpha=0.5)
+        if groups is not None:
+            _scatter_groups(ax[i], x_, y_, groups, group_labels)
+        else:
+            ax[i].scatter(x_, y_, s=2**2, alpha=0.5)
         if line_x is not None and line_y is not None:
             ax[i].plot(
-                line_x[i], line_y[i], linewidth=3, linestyle="--", color="tab:orange"
+                line_x[i], line_y[i], linewidth=3, linestyle="--", color=line_color
             )
         ax[i].set_xlabel(x_label[i])
         ax[i].set_ylabel(y_label[i])
@@ -118,14 +149,16 @@ def plot_data_vs_qoi(
 
 
 def plot_data_vs_predict(
-    data: list,
-    predict: list,
+    data: list[np.ndarray],
+    predict: list[np.ndarray],
     path,
     save_txt=True,
     save_plot=True,
     plot_name=None,
     x_label=None,
     y_label=None,
+    groups=None,
+    group_labels=None,
     close_plot=True,
 ):
     """Saves raw true (data) values vs. predictions and plots these as scatter plots."""
@@ -143,13 +176,15 @@ def plot_data_vs_predict(
         y_label=y_label,
         line_x=lim,
         line_y=lim,
+        groups=groups,
+        group_labels=group_labels,
         close_plot=close_plot,
     )
 
 
 def plot_data_vs_predict_error(
-    data: list,
-    predict: list,
+    data: list[np.ndarray],
+    predict: list[np.ndarray],
     path,
     save_plot=True,
     plot_name=None,
@@ -157,10 +192,22 @@ def plot_data_vs_predict_error(
     y_label=None,
     rel_error=False,
     scatter_color=None,
+    groups=None,
+    group_labels=None,
     close_plot=True,
 ):
-    """Calculates and plots prediction errors."""
+    """Calculates and plots prediction errors.
+
+    Points are colored either continuously by `scatter_color` (with a
+    colorbar) or by group with `groups` and `group_labels` (with a legend),
+    see `plot_data_vs_qoi`; the two cannot be combined.
+    """
     assert len(data) == len(predict)
+    assert (groups is None) == (group_labels is None)
+    if scatter_color is not None and groups is not None:
+        raise ValueError("scatter_color and groups cannot both be given")
+    # set the reference line apart from the group colors
+    line_color = "tab:orange" if groups is None else "black"
     # set defaults
     if plot_name is None:
         plot_name = len(data) * [""]
@@ -183,9 +230,11 @@ def plot_data_vs_predict_error(
                 x_, error, c=scatter_color[i], cmap="viridis", s=2**2, alpha=0.5
             )
             fig.colorbar(sc, ax=ax[i])
+        elif groups is not None:
+            sc = _scatter_groups(ax[i], x_, error, groups, group_labels)
         else:
             sc = ax[i].scatter(x_, error, s=2**2, alpha=0.5)
-        ax[i].plot(lim, [0, 0], linewidth=3, linestyle="--", color="tab:orange")
+        ax[i].plot(lim, [0, 0], linewidth=3, linestyle="--", color=line_color)
         ax[i].set_xlabel(x_label[i])
         ax[i].set_ylabel(y_label[i])
         ax[i].set_title(plot_name[i])
