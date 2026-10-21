@@ -10,7 +10,7 @@ license = "GPL-3.0-only"
 license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 dependencies = [
-    "deep-learning-toolkit[diffusion,kde]>=0.5",
+    "deep-learning-toolkit>=0.5",
     "matplotlib>=3,<4",
     "numpy>=2,<3",
     "prettytable>=3,<4",
@@ -19,6 +19,7 @@ dependencies = [
     "scikit-learn>=1,<2",
     "torch>=2.11,<3",
     "tqdm>=4,<5",
+    "typing-extensions>=4.16,<5",
 ]
 
 # Development dependencies
@@ -30,7 +31,7 @@ dev = [
     "isort>=5,<6",
 ]
 localdev = [
-    "deep-learning-toolkit[diffusion,kde]>=0.5",
+    "deep-learning-toolkit>=0.5",
 ]
 
 # Accelerator groups for PyTorch

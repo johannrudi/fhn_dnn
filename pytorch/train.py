@@ -71,7 +71,6 @@ def run_train(
         features_noise,
         targets_noise,
         _,
-        _,
         features_transform_fn,
         train_input_transform_fn,
     ) = common.load_and_preprocess_data(params, ctx.device, logger)

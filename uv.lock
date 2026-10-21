@@ -606,28 +606,17 @@ dependencies = [
     { name = "typer" },
 ]
 
-[package.optional-dependencies]
-diffusion = [
-    { name = "flow-matching" },
-]
-kde = [
-    { name = "torch-kde" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "flow-matching", specifier = ">=1.0.10,<2" },
-    { name = "flow-matching", marker = "extra == 'diffusion'", specifier = ">=1.0.10,<2" },
     { name = "matplotlib", specifier = ">=3,<4" },
     { name = "prettytable", specifier = ">=3,<4" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "torch", specifier = ">=2.11,<3" },
     { name = "torch-kde", specifier = ">=0.1.5" },
-    { name = "torch-kde", marker = "extra == 'kde'", specifier = ">=0.1.5" },
     { name = "tqdm", specifier = ">=4,<5" },
     { name = "typer", specifier = ">=0.27" },
 ]
-provides-extras = ["diffusion", "kde"]
 
 [package.metadata.requires-dev]
 cpu = [{ name = "torch", specifier = ">=2.11,<3", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "deep-learning-toolkit", group = "cpu" } }]
@@ -638,8 +627,10 @@ cu132 = [{ name = "torch", specifier = ">=2.11,<3", index = "https://download.py
 dev = [
     { name = "basedpyright", specifier = ">=1.39,<2" },
     { name = "black", extras = ["jupyter"], specifier = ">=25,<26" },
+    { name = "ipykernel", specifier = ">=6,<8" },
     { name = "isort", specifier = ">=5,<6" },
     { name = "pytest", specifier = ">=8,<9" },
+    { name = "zensical", specifier = ">=0.0.71" },
 ]
 xpu = [
     { name = "torch", specifier = ">=2.11,<3", index = "https://download.pytorch.org/whl/xpu", conflict = { package = "deep-learning-toolkit", group = "xpu" } },
@@ -665,7 +656,7 @@ name = "fhn-dnn"
 version = "2.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "deep-learning-toolkit", extra = ["diffusion", "kde"] },
+    { name = "deep-learning-toolkit" },
     { name = "matplotlib" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu')" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu')" },
@@ -682,6 +673,7 @@ dependencies = [
     { name = "torch", version = "2.14.0+cu132", source = { registry = "https://download.pytorch.org/whl/cu132" }, marker = "extra == 'group-7-fhn-dnn-cu132' or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra == 'group-7-fhn-dnn-cu128' and extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu')" },
     { name = "torch", version = "2.14.0+xpu", source = { registry = "https://download.pytorch.org/whl/xpu" }, marker = "(extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu126') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cpu' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu128') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu126' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu130') or (extra == 'group-7-fhn-dnn-cu128' and extra == 'group-7-fhn-dnn-cu132') or (extra == 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-cu132') or (extra != 'group-7-fhn-dnn-cu132' and extra == 'group-7-fhn-dnn-xpu') or (extra != 'group-7-fhn-dnn-cpu' and extra != 'group-7-fhn-dnn-cu126' and extra != 'group-7-fhn-dnn-cu128' and extra != 'group-7-fhn-dnn-cu130' and extra == 'group-7-fhn-dnn-xpu')" },
     { name = "tqdm" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -707,7 +699,7 @@ dev = [
     { name = "isort" },
 ]
 localdev = [
-    { name = "deep-learning-toolkit", extra = ["diffusion", "kde"] },
+    { name = "deep-learning-toolkit" },
 ]
 xpu = [
     { name = "torch", version = "2.14.0+xpu", source = { registry = "https://download.pytorch.org/whl/xpu" } },
@@ -716,7 +708,7 @@ xpu = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deep-learning-toolkit", extras = ["diffusion", "kde"], specifier = ">=0.5" },
+    { name = "deep-learning-toolkit", specifier = ">=0.5" },
     { name = "matplotlib", specifier = ">=3,<4" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "prettytable", specifier = ">=3,<4" },
@@ -725,6 +717,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1,<2" },
     { name = "torch", specifier = ">=2.11,<3" },
     { name = "tqdm", specifier = ">=4,<5" },
+    { name = "typing-extensions", specifier = ">=4.16,<5" },
 ]
 
 [package.metadata.requires-dev]
@@ -738,7 +731,7 @@ dev = [
     { name = "black", specifier = ">=25,<26" },
     { name = "isort", specifier = ">=5,<6" },
 ]
-localdev = [{ name = "deep-learning-toolkit", extras = ["diffusion", "kde"], editable = "../../deep-learning-toolkit" }]
+localdev = [{ name = "deep-learning-toolkit", editable = "../../deep-learning-toolkit" }]
 xpu = [
     { name = "torch", specifier = ">=2.11,<3", index = "https://download.pytorch.org/whl/xpu", conflict = { package = "fhn-dnn", group = "xpu" } },
     { name = "triton-xpu", index = "https://download.pytorch.org/whl/xpu", conflict = { package = "fhn-dnn", group = "xpu" } },

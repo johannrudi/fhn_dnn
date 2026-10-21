@@ -1,0 +1,55 @@
+{
+  "kind": "fhn_dnn/mock-record-2020",
+  "description": "Hand-written record for the noise of the 2020 dataset; holds only the fields fhn_dnn reads.",
+  "factory": "ar1",
+  "file": "ar1_record.json",
+  "config": {
+    "splits": {
+      "train": 8000,
+      "test": 2000
+    }
+  },
+  "artifacts": {
+    "params": {
+      "files": [
+        "noise_correlated_Nt1000_Nsim10000_correlation.npy",
+        "noise_correlated_Nt1000_Nsim10000_stddev.npy"
+      ]
+    },
+    "states": {
+      "files": [
+        "noise_correlated_Nt1000_Nsim10000_data.npy"
+      ]
+    }
+  },
+  "scales": {
+    "reference_split": "train",
+    "params": {
+      "method": "standardize",
+      "columns": [
+        "rho",
+        "sigma"
+      ],
+      "add": [
+        -0.8013554537296295,
+        -0.06980464410036802
+      ],
+      "mult": [
+        17.726717943103786,
+        103.08709092552667
+      ]
+    },
+    "states": {
+      "method": "standardize",
+      "columns": [
+        "v0"
+      ],
+      "add": [
+        -0.00010084677012404424
+      ],
+      "mult": [
+        2.8352643397971256
+      ]
+    }
+  }
+}

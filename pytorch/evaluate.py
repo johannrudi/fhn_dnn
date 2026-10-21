@@ -35,8 +35,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from data import (
+    DictArray,
+    SubsetName,
+    apply_scale_inverse,
     create_dataloader,
     dictarray_is_not_none,
+    get_targets_scale,
 )
 
 
@@ -89,14 +93,14 @@ def run_evaluate(
         targets,
         features_noise,
         targets_noise,
-        targets_scale,
-        targets_noise_scale,
+        records,
         features_transform_fn,
         train_input_transform_fn,
     ) = common.load_and_preprocess_data(params, ctx.device, logger)
+    data_params = params["data"]
 
     # create train/validate and test dataloaders separately
-    train_validate_dataloader: dict[str, DataLoader] = {
+    train_validate_dataloader: dict[SubsetName, DataLoader] = {
         key: create_dataloader(
             params=params,
             logger=logging_get_logger("create_dataloader"),
@@ -110,7 +114,7 @@ def run_evaluate(
         )
         for key in ("train", "validate")
     }
-    test_dataloader: dict[str, DataLoader] = {
+    test_dataloader: dict[SubsetName, DataLoader] = {
         "test": create_dataloader(
             params=params,
             logger=logging_get_logger("create_dataloader"),
@@ -162,8 +166,8 @@ def run_evaluate(
             ctx.device,
             targets,
             targets_noise,
-            targets_scale,
-            targets_noise_scale,
+            records,
+            data_params,
             train_input_transform_fn,
         )
         _log_runtime(logger, time_eval, n_samples_train_validate, tag=tag)
@@ -225,8 +229,8 @@ def run_evaluate(
         ctx.device,
         targets,
         targets_noise,
-        targets_scale,
-        targets_noise_scale,
+        records,
+        data_params,
         train_input_transform_fn,
     )
     _log_runtime(
@@ -258,44 +262,28 @@ def run_evaluate(
     print(f"</{self_tag}>")
 
 
-def _undo_targets_scale(
-    eval_dict: dict[str, np.ndarray],
-    scale: dict[str, np.ndarray],
-) -> None:
-    """Apply inverse target scale to whatever splits are present in ``eval_dict``.
-
-    Mirrors ``data._apply_scale_inverse`` but does not require the full
-    train/validate/test key set that ``postprocess_targets`` demands via
-    ``dictarray_is_none``.
-
-    Args:
-        eval_dict: Split name to array mapping; updated in place.
-        scale: Dict with ``shift`` and ``mult`` arrays broadcast over samples.
-    """
-    for key in eval_dict.keys():
-        eval_dict[key] = eval_dict[key] * scale["mult"] + scale["shift"]
-
-
 def _predict_and_postprocess(
     net: torch.nn.Module,
-    eval_dataloader: dict[str, DataLoader],
+    eval_dataloader: dict[SubsetName, DataLoader],
     device: torch.device,
-    targets: Any,
-    targets_noise: Any,
-    targets_scale: Any,
-    targets_noise_scale: Any,
+    targets: DictArray,
+    targets_noise: DictArray,
+    records: dict[str, dict[str, Any] | None],
+    data_params: dict[str, Any],
     train_input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], float]:
+) -> tuple[dict[SubsetName, np.ndarray], dict[SubsetName, np.ndarray], float]:
     """Predict on ``eval_dataloader`` and undo target scaling.
 
     Args:
         net: Network whose weights are already loaded for this pass.
-        eval_dataloader: Split name to dataloader mapping for this pass.
+        eval_dataloader: Subset name to dataloader mapping for this pass.
         device: Device for the forward pass.
-        targets: Full targets dict (used only for scale-selection branching).
-        targets_noise: Full noise-targets dict (scale-selection branching).
-        targets_scale: Shift/mult scale for ODE targets, or None.
-        targets_noise_scale: Shift/mult scale for noise targets, or None.
+        targets: Full targets dict (used only to select the scales).
+        targets_noise: Full noise-targets dict (used only to select the scales).
+        records: Records from ``common.load_and_preprocess_data``; they hold
+            the target scales.
+        data_params: Resolved data parameters; scaling is undone only if
+            ``targets_normalize`` is set.
         train_input_transform_fn: Optional input transform passed to ``predict``.
 
     Returns:
@@ -312,33 +300,23 @@ def _predict_and_postprocess(
     )
     time_eval = timeit.default_timer() - time_eval
 
-    # postprocess evaluation data (scale inverse on present splits only;
-    # postprocess_targets requires train/validate/test keys via dictarray_is_none)
-    if dictarray_is_not_none(targets) and dictarray_is_not_none(targets_noise):
-        assert targets_scale is not None
-        assert targets_noise_scale is not None
-        eval_targets_scale = {}
-        for key in targets_scale.keys():
-            eval_targets_scale[key] = np.concatenate(
-                (targets_scale[key], targets_noise_scale[key]), axis=1
-            )
-        _undo_targets_scale(eval_targets_data, eval_targets_scale)
-        _undo_targets_scale(eval_targets_pred, eval_targets_scale)
-    elif dictarray_is_not_none(targets):
-        _undo_targets_scale(eval_targets_data, targets_scale)
-        _undo_targets_scale(eval_targets_pred, targets_scale)
-    elif dictarray_is_not_none(targets_noise):
-        _undo_targets_scale(eval_targets_data, targets_noise_scale)
-        _undo_targets_scale(eval_targets_pred, targets_noise_scale)
-    else:
-        raise NotImplementedError()
+    # undo the target scaling (on the subsets of this pass only, so not with
+    # `postprocess_targets`, which needs all three subsets)
+    if data_params.get("targets_normalize", False):
+        scale = get_targets_scale(
+            records,
+            dictarray_is_not_none(targets),
+            dictarray_is_not_none(targets_noise),
+        )
+        apply_scale_inverse(eval_targets_data, scale)
+        apply_scale_inverse(eval_targets_pred, scale)
 
     return eval_targets_pred, eval_targets_data, time_eval
 
 
 def _log_eval_metrics(
-    eval_targets_data: dict[str, np.ndarray],
-    eval_targets_pred: dict[str, np.ndarray],
+    eval_targets_data: dict[SubsetName, np.ndarray],
+    eval_targets_pred: dict[SubsetName, np.ndarray],
     mode: Mode,
     logger: logging.Logger,
     tag: str = "",
@@ -405,8 +383,8 @@ def _log_runtime(
 
 
 def _plot_predictions(
-    eval_targets_data: dict[str, np.ndarray],
-    eval_targets_pred: dict[str, np.ndarray],
+    eval_targets_data: dict[SubsetName, np.ndarray],
+    eval_targets_pred: dict[SubsetName, np.ndarray],
     params: dict[str, Any],
     output_dir: pathlib.Path,
     close_plot: bool = True,
@@ -428,9 +406,7 @@ def _plot_predictions(
     for key in eval_targets_data.keys():
         # skip if no samples exist
         n_key = "N" + key
-        n_samples_for_key = params["data_train"].get(
-            n_key, params["data_evaluate"].get(n_key)
-        )
+        n_samples_for_key = params["data"].get(n_key)
         if n_samples_for_key is None or n_samples_for_key <= 0:
             continue
         # set up plotting
@@ -465,10 +441,10 @@ def _plot_predictions(
 
 def predict(
     net: torch.nn.Module,
-    eval_dataloader: dict[str, DataLoader],
+    eval_dataloader: dict[SubsetName, DataLoader],
     device: torch.device,
     input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> tuple[dict[SubsetName, np.ndarray], dict[SubsetName, np.ndarray]]:
     """Run the network over each eval dataloader split.
 
     Args:
@@ -482,8 +458,8 @@ def predict(
     """
     net.eval()
     # get network predictions
-    data: dict[str, np.ndarray] = dict()
-    pred: dict[str, np.ndarray] = dict()
+    data: dict[SubsetName, np.ndarray] = dict()
+    pred: dict[SubsetName, np.ndarray] = dict()
     with torch.no_grad():
         for key in eval_dataloader.keys():
             d_list: list[np.ndarray] = list()
@@ -502,8 +478,8 @@ def predict(
 
 
 def eval_data_vs_pred(
-    data: dict[str, np.ndarray],
-    pred: dict[str, np.ndarray],
+    data: dict[SubsetName, np.ndarray],
+    pred: dict[SubsetName, np.ndarray],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Compute per-target and overall MSE, MAE, and R2 for each split.
 

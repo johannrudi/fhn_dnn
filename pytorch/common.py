@@ -16,7 +16,13 @@ import torch
 from dlk.mgmt.log import logging_get_logger, logging_set_up
 from nets import create_ae
 
-from data import load_data, preprocess_features, preprocess_targets
+from data import (
+    DictArray,
+    dictarray_is_not_none,
+    load_data,
+    preprocess_features,
+    preprocess_targets,
+)
 
 
 def initialize_run(
@@ -94,20 +100,19 @@ def load_and_preprocess_data(
     device: torch.device,
     logger: logging.Logger,
 ) -> tuple[
-    dict[str, Any],
-    dict[str, Any],
-    dict[str, Any],
-    dict[str, Any],
-    Any,
-    Any,
+    DictArray,
+    DictArray,
+    DictArray,
+    DictArray,
+    dict[str, dict[str, Any] | None],
     Callable | None,
     Callable | None,
 ]:
     """Load features/targets and build optional input transforms.
 
-    Does not create dataloaders; each caller builds its own. Behavior matches
-    ``run_dnn.py`` data setup, including the optional FFT transform and the
-    ``####DEV`` autoencoder-encoder path (file discovery uses ``pathlib``).
+    Does not create dataloaders; each caller builds its own. Includes the
+    optional FFT transform and the ``####DEV`` autoencoder-encoder path (file
+    discovery uses ``pathlib``).
 
     Args:
         params: Full configuration dict.
@@ -117,34 +122,34 @@ def load_and_preprocess_data(
 
     Returns:
         Tuple
-        ``(features, targets, features_noise, targets_noise, targets_scale,
-        targets_noise_scale, features_transform_fn, train_input_transform_fn)``.
+        ``(features, targets, features_noise, targets_noise, records,
+        features_transform_fn, train_input_transform_fn)``; ``records`` holds
+        the scales to undo the preprocessing with.
     """
     # load data
-    features, targets, features_noise, targets_noise = load_data(
+    features, targets, features_noise, targets_noise, records = load_data(
         params, logging_get_logger("load_data")
     )
 
     # preprocess data
-    features_scale = preprocess_features(
-        features, params, logging_get_logger("preprocess_features")
-    )
-    targets_scale = preprocess_targets(
-        targets, params, logging_get_logger("preprocess_targets")
-    )
-    preprocess_features(
-        features_noise,
-        params,
-        logging_get_logger("preprocess_features_noise"),
-        scale=features_scale,
-        array_name="features_noise",
-    )
-    targets_noise_scale = preprocess_targets(
-        targets_noise,
-        params,
-        logging_get_logger("preprocess_targets_noise"),
-        array_name="targets_noise",
-    )
+    data_params = params["data"]
+    ode_record = records["ode"]
+    assert ode_record is not None
+    preprocess_features(features, ode_record, data_params)
+    preprocess_targets(targets, ode_record, data_params)
+    if dictarray_is_not_none(features_noise):
+        # noise that is the features gets the noise record's scale; noise added
+        # to the ODE features gets theirs (see `preprocess_features`)
+        if data_params["features_type"].casefold() == "noise":
+            noise_record = records["noise"]
+        else:
+            noise_record = ode_record
+        assert noise_record is not None
+        preprocess_features(features_noise, noise_record, data_params)
+    if dictarray_is_not_none(targets_noise):
+        noise_record = records["noise"]
+        assert noise_record is not None
+        preprocess_targets(targets_noise, noise_record, data_params)
 
     # set transform functions
     features_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None
@@ -208,8 +213,7 @@ def load_and_preprocess_data(
         targets,
         features_noise,
         targets_noise,
-        targets_scale,
-        targets_noise_scale,
+        records,
         features_transform_fn,
         train_input_transform_fn,
     )

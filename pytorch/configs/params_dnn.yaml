@@ -1,40 +1,33 @@
 description: "Options for DNN-based inverse maps"
 
-data:
+data:  # options shared by training and evaluation
     data_dir: "../data/2020-12-09"  # relative path to data directory
+    features_type: "TIME_NOISE"     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
+    features_use_channels_range: [0, 1]
+    features_sub_length: 800        # use sub interval of this size
+    features_sub_step: 1            # subsample by this step size
+    ##features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
+    ##num_features: [3, 500]
+    targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
     features_normalize: False       # scale features to have zero mean and unit std
     targets_normalize: False        # scale targets to have zero mean and unit std
+    Ntrain:    1024
+    Nvalidate: 1000
+    Ntest:     2000
     # use encoder network of an autoencoder
     # autoencoder_load_dir: 'runs/ae'
     # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
     # num_features: [1, 16]  # adjust to AE latent size
 
-data_train:
-    features_type: "TIME_NOISE"     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
-    features_use_channels_range: [0, 1]
-    features_sub_length: 800        # use sub interval of this size
-    features_sub_step: 1            # subsample by this step size
+data_train:  # options only for training
     features_sub_begin_random: True # flag to pick a sub interval at random
     # features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
     features_additive_noise_std: 0  # add i.i.d. noise
-    ##features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
-    ##num_features: [3, 500]
-    targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
-    Ntrain:    1024
-    Nvalidate: 1000
     batch_size: 128
 
-data_evaluate:
-    features_type: "TIME_NOISE"     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
-    features_use_channels_range: [0, 1]
-    features_sub_length: 800        # use sub interval of this size
-    features_sub_step: 1            # subsample by this step size
+data_evaluate:  # options only for evaluation
     features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
     features_additive_noise_std: 0  # add i.i.d. noise
-    ##features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
-    ##num_features: [3, 500]
-    targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'
-    Ntest: 2000
     batch_size: 128
 
 dataloader:
