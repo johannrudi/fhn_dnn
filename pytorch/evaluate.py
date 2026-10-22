@@ -11,7 +11,7 @@ import argparse
 import logging
 import pathlib
 import sys
-import timeit
+import time
 from collections.abc import Callable
 from typing import Any, Sized, cast
 
@@ -341,14 +341,14 @@ def _predict_and_postprocess(
         ``time_eval`` is the wall-clock seconds spent in ``predict``.
     """
     # compute predictions
-    time_eval = timeit.default_timer()
+    time_eval = time.perf_counter()
     eval_targets_pred, eval_targets_data = predict(
         net,
         eval_dataloader,
         device,
         input_transform_fn=train_input_transform_fn,
     )
-    time_eval = timeit.default_timer() - time_eval
+    time_eval = time.perf_counter() - time_eval
 
     # undo the target scaling (on the subsets of this pass only, so not with
     # `postprocess_targets`, which needs all three subsets)
