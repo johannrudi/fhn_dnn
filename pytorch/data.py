@@ -121,7 +121,7 @@ def _load_splits(
     }
 
 
-def _load_splits_data2020(
+def _load_splits_fhn2020(
     data_dir: pathlib.Path, record: dict[str, Any], kind: DataKind
 ) -> dict[str, np.ndarray]:
     """Load the train and test splits of one data kind from the 2020 dataset.
@@ -233,7 +233,7 @@ _TARGETS_TYPES = ("ode", "noise", "ode_noise", "n/a")
 # load function by the `kind` of a record
 _RECORD_KIND_TO_LOAD_SPLITS_FN = {
     "scientific-data-factory/record": _load_splits,
-    "fhn_dnn/mock-record-2020": _load_splits_data2020,  # hand-written records
+    "fhn_dnn/mock-record-2020": _load_splits_fhn2020,  # hand-written records
 }
 
 
@@ -612,7 +612,7 @@ def get_targets_scale(
 # ---------------------------------------
 
 
-def get_conditional_positions(
+def get_representative_samples(
     record: dict[str, Any],
     data_params: dict[str, Any],
     subset_name: SubsetName,
@@ -650,87 +650,6 @@ def get_conditional_positions(
         if row in rows:
             positions.append(row - rows.start)
     return np.array(positions, dtype=np.int64)
-
-
-def _filter_samples(
-    features: torch.Tensor,
-    targets: torch.Tensor,
-    position: torch.Tensor | list[torch.Tensor],
-    threshold: list[float],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Keep the samples within `threshold` of `position`, and their targets."""
-    # filter features, as indices of the samples kept
-    if features.shape[-1] == len(position):
-        # if as many positions as features: threshold positions across all features
-        mask = torch.ones(features.shape[0], dtype=torch.bool)
-        for i, (pos, thresh) in enumerate(zip(position, threshold)):
-            features_ = features[..., i].flatten()
-            mask &= (pos - thresh < features_) & (features_ < pos + thresh)
-        indices = torch.where(mask)[0]
-    elif 1 == len(position) and features.shape[1:] == position[0].shape[1:]:
-        # if positions are samples: threshold by the normed distance to samples
-        sample = position[0]
-        thresh = threshold[0]
-        assert 1 == sample.shape[0]
-        distances = torch.linalg.norm(features - sample, dim=(1, 2))
-        indices = torch.where(distances < thresh)[0]
-    else:
-        raise ValueError(
-            "position must hold one value per feature (length"
-            f" {features.shape[-1]}) or one sample of shape"
-            f" (1, {', '.join(map(str, features.shape[1:]))});"
-            f" got length {len(position)}"
-        )
-    if 0 == indices.numel():
-        raise ValueError("empty filtering result")
-    features_filtered = features[indices]
-    # apply filter to targets
-    if 2 == targets.ndim:
-        targets_filtered = targets[indices]
-    elif 3 == targets.ndim:
-        targets_filtered = targets[:, indices, ...]
-    else:
-        raise NotImplementedError(f"targets.ndim={targets.ndim}")
-    return features_filtered, targets_filtered
-
-
-def get_conditional_samples(
-    features: torch.Tensor,
-    targets: torch.Tensor,
-    position: torch.Tensor | list[torch.Tensor],
-    params: dict[str, Any],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Keep the samples near `position`, with a threshold by features type."""
-    # NOTE: `position` is not what `get_conditional_positions` returns. That
-    #       function returns indices of samples into a subset, whereas
-    #       `position` must be a list of either one sample, `[features[i : i + 1]]`
-    #       (TIME, TIME_NOISE, NOISE), or one value per feature, `features[i, 0]`
-    #       (RATE_DURATION). A caller turns an index `i` from the former into
-    #       the latter. Pass features after `preprocess_features`: NaN values
-    #       of stats match nothing.
-    features_type = params["data"]["features_type"].casefold()
-    # extract conditional samples
-    assert 1 < features.shape[0]
-    if features_type in [
-        "TIME".casefold(),
-        "TIME_NOISE".casefold(),
-        "NOISE".casefold(),
-    ]:
-        threshold = [0.01 * features[0].numel()]
-        features_cond, targets_cond = _filter_samples(
-            features, targets, position, threshold
-        )
-    elif features_type == "ODE_STATS".casefold():
-        raise NotImplementedError()
-    elif features_type == "RATE_DURATION".casefold():
-        # threshold = [0.05, 0.15]
-        threshold = [0.6, 0.6]
-        features_cond, targets_cond = _filter_samples(
-            features, targets, position, threshold
-        )
-    else:
-        raise ValueError(f"unknown features_type: {features_type}")
-    return features_cond, targets_cond
 
 
 # ---------------------------------------
