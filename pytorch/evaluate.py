@@ -97,8 +97,6 @@ def run_evaluate(
         features_transform_fn,
         train_input_transform_fn,
     ) = common.load_and_preprocess_data(params, ctx.device, logger)
-    data_params = params["data"]
-    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
 
     # create train/validation and test dataloaders separately
     train_validation_dataloader: dict[SubsetName, DataLoader] = {
@@ -140,6 +138,7 @@ def run_evaluate(
 
     save_dir = self_dir / params["runconfig"]["save_dir"]
     show_plots = params["runconfig"].get("show_plots", False)
+    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
 
     # <evaluate_train_validation>
 
@@ -159,7 +158,7 @@ def run_evaluate(
         logger.info(
             f"Evaluate checkpoint {checkpoint_path} (epoch {epoch}) for train/validation"
         )
-        tag = f" [{checkpoint_path.stem}]"
+        tag = f"[{checkpoint_path.stem}]"
 
         eval_targets_pred, eval_targets_data, time_eval = _predict_and_postprocess(
             net,
@@ -168,7 +167,7 @@ def run_evaluate(
             targets,
             targets_noise,
             records,
-            data_params,
+            params["data"],
             train_input_transform_fn,
         )
         _log_runtime(logger, time_eval, n_samples_train_validation, tag=tag)
@@ -236,7 +235,7 @@ def run_evaluate(
         targets,
         targets_noise,
         records,
-        data_params,
+        params["data"],
         train_input_transform_fn,
     )
     _log_runtime(
@@ -273,6 +272,44 @@ def run_evaluate(
     # </output>
 
     print(f"</{self_tag}>")
+
+
+def predict(
+    net: torch.nn.Module,
+    eval_dataloader: dict[SubsetName, DataLoader],
+    device: torch.device,
+    input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+) -> tuple[dict[SubsetName, np.ndarray], dict[SubsetName, np.ndarray]]:
+    """Run the network over each eval dataloader split.
+
+    Args:
+        net: Network in eval mode after this call.
+        eval_dataloader: Mapping from split name to dataloader.
+        device: Device for inputs and the forward pass.
+        input_transform_fn: Optional transform applied to each batch input.
+
+    Returns:
+        ``(pred, data)`` dicts keyed by split, each value an ``ndarray``.
+    """
+    net.eval()
+    # get network predictions
+    data: dict[SubsetName, np.ndarray] = dict()
+    pred: dict[SubsetName, np.ndarray] = dict()
+    with torch.no_grad():
+        for key in eval_dataloader.keys():
+            d_list: list[np.ndarray] = list()
+            p_list: list[np.ndarray] = list()
+            for x, yd in tqdm(eval_dataloader[key], desc=key):
+                x = x.to(device)
+                if input_transform_fn is not None:
+                    x = input_transform_fn(x)
+                yp = net(x)
+                d_list.append(yd.cpu().numpy())
+                p_list.append(yp.cpu().numpy())
+            data[key] = np.concatenate(d_list, axis=0)
+            pred[key] = np.concatenate(p_list, axis=0)
+    # return predictions and (true) data
+    return pred, data
 
 
 def _predict_and_postprocess(
@@ -361,13 +398,17 @@ def _log_eval_metrics(
     split_metrics: dict[str, dict[str, float]] = {}
     for key in eval_targets_data.keys():
         logger.info(
-            f"MSE ({key}){tag}:      " + str(eval_mse[key + "_i"]) + f" {eval_mse[key]}"
+            f"MSE ({key}) {tag}:      "
+            + str(eval_mse[key + "_i"])
+            + f" {eval_mse[key]}"
         )
         logger.info(
-            f"MAE ({key}){tag}:      " + str(eval_mae[key + "_i"]) + f" {eval_mae[key]}"
+            f"MAE ({key}) {tag}:      "
+            + str(eval_mae[key + "_i"])
+            + f" {eval_mae[key]}"
         )
         logger.info(
-            f"R2 score ({key}){tag}: " + str(eval_r2[key + "_i"]) + f" {eval_r2[key]}"
+            f"R2 score ({key}) {tag}: " + str(eval_r2[key + "_i"]) + f" {eval_r2[key]}"
         )
         split_metrics[key] = {
             "mse": eval_mse[key],
@@ -389,17 +430,17 @@ def _log_eval_metrics(
                 {key: eval_targets_pred[key][mask]},
             )
             logger.info(
-                f"MSE ({key}, {label}){tag}:      "
+                f"MSE ({key}, {label}) {tag}:      "
                 + str(g_mse[key + "_i"])
                 + f" {g_mse[key]}"
             )
             logger.info(
-                f"MAE ({key}, {label}){tag}:      "
+                f"MAE ({key}, {label}) {tag}:      "
                 + str(g_mae[key + "_i"])
                 + f" {g_mae[key]}"
             )
             logger.info(
-                f"R2 score ({key}, {label}){tag}: "
+                f"R2 score ({key}, {label}) {tag}: "
                 + str(g_r2[key + "_i"])
                 + f" {g_r2[key]}"
             )
@@ -450,7 +491,7 @@ def _log_runtime(
             Empty string keeps the untagged ``test``-path format.
     """
     logger.info(
-        f"time{tag} {time_eval} s, #samples {n_samples}, samples/sec mean {n_samples / time_eval}"
+        f"time {tag} {time_eval} s, #samples {n_samples}, samples/sec mean {n_samples / time_eval}"
     )
 
 
@@ -518,44 +559,6 @@ def _plot_predictions(
             group_labels=group_labels,
             close_plot=close_plot,
         )
-
-
-def predict(
-    net: torch.nn.Module,
-    eval_dataloader: dict[SubsetName, DataLoader],
-    device: torch.device,
-    input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
-) -> tuple[dict[SubsetName, np.ndarray], dict[SubsetName, np.ndarray]]:
-    """Run the network over each eval dataloader split.
-
-    Args:
-        net: Network in eval mode after this call.
-        eval_dataloader: Mapping from split name to dataloader.
-        device: Device for inputs and the forward pass.
-        input_transform_fn: Optional transform applied to each batch input.
-
-    Returns:
-        ``(pred, data)`` dicts keyed by split, each value an ``ndarray``.
-    """
-    net.eval()
-    # get network predictions
-    data: dict[SubsetName, np.ndarray] = dict()
-    pred: dict[SubsetName, np.ndarray] = dict()
-    with torch.no_grad():
-        for key in eval_dataloader.keys():
-            d_list: list[np.ndarray] = list()
-            p_list: list[np.ndarray] = list()
-            for x, yd in tqdm(eval_dataloader[key], desc=key):
-                x = x.to(device)
-                if input_transform_fn is not None:
-                    x = input_transform_fn(x)
-                yp = net(x)
-                d_list.append(yd.cpu().numpy())
-                p_list.append(yp.cpu().numpy())
-            data[key] = np.concatenate(d_list, axis=0)
-            pred[key] = np.concatenate(p_list, axis=0)
-    # return predictions and (true) data
-    return pred, data
 
 
 def eval_data_vs_pred(

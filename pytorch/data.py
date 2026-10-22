@@ -538,8 +538,19 @@ def preprocess_features(
 
     # replace nan values
     if kind == "stats":
+        total_min = np.nanmin(
+            [np.nanmin(arr, axis=0, keepdims=True) for arr in features.values()],
+            axis=0,
+        )
+        total_max = np.nanmax(
+            [np.nanmax(arr, axis=0, keepdims=True) for arr in features.values()],
+            axis=0,
+        )
+        replace_val = total_min - 0.1 * (total_max - total_min)
         for key in features.keys():
-            features[key] = np.where(np.isnan(features[key]), -10.0, features[key])
+            features[key] = np.where(
+                np.isnan(features[key]), replace_val, features[key]
+            )
 
 
 def postprocess_features(
@@ -904,10 +915,10 @@ def create_dataloader(
     params: dict[str, Any],
     logger: logging.Logger,
     mode: Mode,
-    features: np.ndarray | None,
-    targets: np.ndarray | None,
-    features_noise: np.ndarray | None,
-    targets_noise: np.ndarray | None,
+    features: np.ndarray | torch.Tensor | None,
+    targets: np.ndarray | torch.Tensor | None,
+    features_noise: np.ndarray | torch.Tensor | None,
+    targets_noise: np.ndarray | torch.Tensor | None,
     ctx: distributed.DistributedContext,
     *,
     features_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
