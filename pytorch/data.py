@@ -6,7 +6,7 @@ import json
 import logging
 import pathlib
 from collections.abc import Callable
-from typing import Any, Literal, assert_never, get_args
+from typing import Any, Literal, TypeVar, assert_never, get_args
 
 import dlk.opt.distributed as distributed
 import numpy as np
@@ -462,6 +462,9 @@ def load_timesteps(record: dict[str, Any], data_params: dict[str, Any]) -> np.nd
 #   unscaled = scaled / mult - add
 # Preprocessing applies it; postprocessing reads it again and undoes it.
 
+# a numpy array or a tensor, for functions that take and return either
+ArrayT = TypeVar("ArrayT", np.ndarray, torch.Tensor)
+
 
 # shape of a scale, to broadcast against a subset of one data kind
 _KIND_TO_SCALE_SHAPE: dict[DataKind, tuple[int, ...]] = {
@@ -483,30 +486,93 @@ def get_scale(
     entry = record["scales"][kind]
     shape = _KIND_TO_SCALE_SHAPE[kind]
     assert "add" in entry and "mult" in entry
+
+    # set the scale
     scale = {
         key: np.asarray(entry[key], dtype=np.float32).reshape(shape)
         for key in ("add", "mult")
     }
+
+    # modify the scale if the chanels range is limited
     if kind == "states" and channels_range is not None:
         start, stop = channels_range
         scale = {key: value[:, start:stop, :] for key, value in scale.items()}
+
     return scale
 
 
+def get_targets_scale(
+    records: dict[str, dict[str, Any] | None],
+    data_params: dict[str, Any],
+) -> dict[str, np.ndarray]:
+    """Scale of the network outputs: the ODE params, then the noise params."""
+    targets_type = data_params.get("targets_type", "n/a").casefold()
+    if targets_type not in _TARGETS_TYPES:
+        raise ValueError(f"unknown {targets_type=}")
+
+    scales = []
+    if targets_type in ("ode", "ode_noise"):
+        assert records["ode"] is not None
+        scales.append(get_scale(records["ode"], "params"))
+    if targets_type in ("noise", "ode_noise"):
+        assert records["noise"] is not None
+        scales.append(get_scale(records["noise"], "params"))
+    return {
+        "add": np.concatenate([scale["add"] for scale in scales], axis=1),
+        "mult": np.concatenate([scale["mult"] for scale in scales], axis=1),
+    }
+
+
+def scale_array(
+    x: ArrayT, scale: dict[str, np.ndarray], *, is_std: bool = False
+) -> ArrayT:
+    """Scale on one numpy array or tensor.
+
+    With `is_std`, only `mult` is applied, as for standard deviations.
+    """
+    if isinstance(x, torch.Tensor):
+        mult = torch.as_tensor(scale["mult"], dtype=x.dtype, device=x.device)
+        add = torch.as_tensor(scale["add"], dtype=x.dtype, device=x.device)
+        return x * mult if is_std else (x + add) * mult
+    mult, add = scale["mult"], scale["add"]
+    return x * mult if is_std else (x + add) * mult
+
+
 def apply_scale(
-    arrays: dict[SubsetName, np.ndarray], scale: dict[str, np.ndarray]
+    arrays: dict[Any, ArrayT],
+    scale: dict[str, np.ndarray],
+    *,
+    is_std: bool = False,
 ) -> None:
     """Applies scale for preprocessing, in place for each subset."""
     for key in arrays.keys():
-        arrays[key] = (arrays[key] + scale["add"]) * scale["mult"]
+        arrays[key] = scale_array(arrays[key], scale, is_std=is_std)
+
+
+def scale_inverse_array(
+    x: ArrayT, scale: dict[str, np.ndarray], *, is_std: bool = False
+) -> ArrayT:
+    """Undo `scale` on one numpy array or tensor.
+
+    With `is_std`, only `mult` is undone, as for standard deviations.
+    """
+    if isinstance(x, torch.Tensor):
+        mult = torch.as_tensor(scale["mult"], dtype=x.dtype, device=x.device)
+        add = torch.as_tensor(scale["add"], dtype=x.dtype, device=x.device)
+        return x / mult if is_std else x / mult - add
+    mult, add = scale["mult"], scale["add"]
+    return x / mult if is_std else x / mult - add
 
 
 def apply_scale_inverse(
-    arrays: dict[SubsetName, np.ndarray], scale: dict[str, np.ndarray]
+    arrays: dict[Any, ArrayT],
+    scale: dict[str, np.ndarray],
+    *,
+    is_std: bool = False,
 ) -> None:
-    """Applies inverse scale for postprocessing, in place for each subset."""
+    """Applies inverse scale for postprocessing, in place for each entry."""
     for key in arrays.keys():
-        arrays[key] = arrays[key] / scale["mult"] - scale["add"]
+        arrays[key] = scale_inverse_array(arrays[key], scale, is_std=is_std)
 
 
 def preprocess_features(
@@ -597,27 +663,6 @@ def postprocess_targets(
     apply_scale_inverse(targets, get_scale(record, "params"))
 
 
-def get_targets_scale(
-    records: dict[str, dict[str, Any] | None],
-    has_targets: bool,
-    has_targets_noise: bool,
-) -> dict[str, np.ndarray]:
-    """Scale of the network outputs: the ODE params, then the noise params."""
-    scales = []
-    if has_targets:
-        assert records["ode"] is not None
-        scales.append(get_scale(records["ode"], "params"))
-    if has_targets_noise:
-        assert records["noise"] is not None
-        scales.append(get_scale(records["noise"], "params"))
-    if not scales:
-        raise ValueError("expected targets, noise targets, or both")
-    return {
-        "add": np.concatenate([scale["add"] for scale in scales], axis=1),
-        "mult": np.concatenate([scale["mult"] for scale in scales], axis=1),
-    }
-
-
 # ---------------------------------------
 # Representative Samples
 # ---------------------------------------
@@ -664,6 +709,64 @@ def get_representative_samples(
 
 
 # ---------------------------------------
+# Sub-interval Begins
+# ---------------------------------------
+
+
+def eval_sub_begin_sequence(params: dict[str, Any]) -> list[int] | None:
+    """The sub-interval begins of evaluation, `data_evaluate.features_sub_begin_sequence`."""
+    return params["data_evaluate"].get("features_sub_begin_sequence")
+
+
+def sub_begin_rows(
+    n_rows: int, sub_begin_sequence: list[int] | None
+) -> list[tuple[int | None, slice]]:
+    """Rows of each sub-interval begin in the output of an unshuffled `FHN_Dataset`.
+
+    With `features_sub_begin_sequence`, the dataset holds one contiguous block of
+    `dataset_size` rows per begin, in the order of the sequence (the index
+    mapping in `FHN_Dataset.__getitem__`). Without it, all rows belong to one
+    begin, None.
+    """
+    if not sub_begin_sequence:
+        return [(None, slice(0, n_rows))]
+    n_begins = len(sub_begin_sequence)
+    assert n_rows % n_begins == 0, f"{n_rows=} not a multiple of {n_begins=}"
+    size = n_rows // n_begins
+    return [
+        (begin, slice(i * size, (i + 1) * size))
+        for i, begin in enumerate(sub_begin_sequence)
+    ]
+
+
+def sub_begin_label(begin: int | None) -> str:
+    """Label of a begin for logs and legends; empty for None."""
+    return "" if begin is None else f"begin={begin}"
+
+
+def sub_begin_suffix(begin: int | None) -> str:
+    """Suffix of a begin for file names; empty for None, so names stay unchanged."""
+    return "" if begin is None else f"_begin{begin}"
+
+
+def sub_begin_groups(
+    n_rows: int, sub_begin_sequence: list[int] | None
+) -> tuple[np.ndarray | None, list[str] | None]:
+    """Group index of each row and one label per begin, for coloring plots.
+
+    Returns `(None, None)` without a sequence or rows.
+    """
+    if not sub_begin_sequence or n_rows == 0:
+        return None, None
+    groups = np.empty(n_rows, dtype=np.int64)
+    labels = []
+    for g, (begin, rows) in enumerate(sub_begin_rows(n_rows, sub_begin_sequence)):
+        groups[rows] = g
+        labels.append(sub_begin_label(begin))
+    return groups, labels
+
+
+# ---------------------------------------
 # Dataset
 # ---------------------------------------
 
@@ -673,7 +776,11 @@ _ITEM_RETURN_ORDERS: tuple[ItemReturnOrder, ...] = get_args(ItemReturnOrder)
 
 
 class FHN_Dataset(Dataset):
-    """Samples of features and targets, with optional noise, sub-intervals, and transform."""
+    """Samples of features and targets, with optional noise, sub-intervals, and transform.
+
+    With `features_sub_begin_sequence`, the dataset holds one contiguous block of
+    rows per begin; `sub_begin_rows` gives the rows of each begin.
+    """
 
     def __init__(
         self,
@@ -883,6 +990,11 @@ class FHN_Dataset(Dataset):
             assert_never(self.item_return_order)
 
 
+# ---------------------------------------
+# Dataloader
+# ---------------------------------------
+
+
 def _resolve_batch_size(
     world_size: int,
     global_batch_size: int | None,
@@ -904,11 +1016,6 @@ def _resolve_batch_size(
         raise ValueError("expected either global_batch_size or local_batch_size")
 
     return global_batch_size, local_batch_size
-
-
-# ---------------------------------------
-# Dataloader
-# ---------------------------------------
 
 
 def create_dataloader(

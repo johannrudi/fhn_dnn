@@ -35,12 +35,14 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from data import (
-    DictArray,
     SubsetName,
     apply_scale_inverse,
     create_dataloader,
-    dictarray_is_not_none,
+    eval_sub_begin_sequence,
     get_targets_scale,
+    sub_begin_groups,
+    sub_begin_label,
+    sub_begin_rows,
 )
 
 
@@ -138,7 +140,7 @@ def run_evaluate(
 
     save_dir = self_dir / params["runconfig"]["save_dir"]
     show_plots = params["runconfig"].get("show_plots", False)
-    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
+    sub_begin_sequence = eval_sub_begin_sequence(params)
 
     # <evaluate_train_validation>
 
@@ -164,8 +166,6 @@ def run_evaluate(
             net,
             train_validation_dataloader,
             ctx.device,
-            targets,
-            targets_noise,
             records,
             params["data"],
             train_input_transform_fn,
@@ -232,8 +232,6 @@ def run_evaluate(
         net,
         test_dataloader,
         ctx.device,
-        targets,
-        targets_noise,
         records,
         params["data"],
         train_input_transform_fn,
@@ -316,8 +314,6 @@ def _predict_and_postprocess(
     net: torch.nn.Module,
     eval_dataloader: dict[SubsetName, DataLoader],
     device: torch.device,
-    targets: DictArray,
-    targets_noise: DictArray,
     records: dict[str, dict[str, Any] | None],
     data_params: dict[str, Any],
     train_input_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None,
@@ -350,16 +346,11 @@ def _predict_and_postprocess(
     )
     time_eval = time.perf_counter() - time_eval
 
-    # undo the target scaling (on the subsets of this pass only, so not with
-    # `postprocess_targets`, which needs all three subsets)
+    # undo the target scaling
     if data_params.get("targets_normalize", False):
-        scale = get_targets_scale(
-            records,
-            dictarray_is_not_none(targets),
-            dictarray_is_not_none(targets_noise),
-        )
-        apply_scale_inverse(eval_targets_data, scale)
-        apply_scale_inverse(eval_targets_pred, scale)
+        targets_scale = get_targets_scale(records, data_params)
+        for arrays in (eval_targets_data, eval_targets_pred):
+            apply_scale_inverse(arrays, targets_scale)
 
     return eval_targets_pred, eval_targets_data, time_eval
 
@@ -417,17 +408,15 @@ def _log_eval_metrics(
         }
 
     # compute evaluation metrics per sub-interval begin
+    if not sub_begin_sequence:
+        return split_metrics
     for key in eval_targets_data.keys():
-        groups, group_labels = _sub_begin_groups(
-            sub_begin_sequence, eval_targets_data[key].shape[0]
-        )
-        if groups is None or group_labels is None:
-            continue
-        for g, label in enumerate(group_labels):
-            mask = groups == g
+        n_rows = eval_targets_data[key].shape[0]
+        for begin, rows in sub_begin_rows(n_rows, sub_begin_sequence):
+            label = sub_begin_label(begin)
             g_mse, g_mae, g_r2 = eval_data_vs_pred(
-                {key: eval_targets_data[key][mask]},
-                {key: eval_targets_pred[key][mask]},
+                {key: eval_targets_data[key][rows]},
+                {key: eval_targets_pred[key][rows]},
             )
             logger.info(
                 f"MSE ({key}, {label}) {tag}:      "
@@ -446,33 +435,6 @@ def _log_eval_metrics(
             )
 
     return split_metrics
-
-
-def _sub_begin_groups(
-    sub_begin_sequence: list[int] | None,
-    n_samples: int,
-) -> tuple[np.ndarray | None, list[str] | None]:
-    """Group index and label of each eval sample by its sub-interval begin.
-
-    With ``features_sub_begin_sequence`` set, the eval dataset holds one
-    contiguous block per begin (``FHN_Dataset.__getitem__`` maps index ``i``
-    to begin ``i // dataset_size``), and the eval dataloader keeps that order.
-
-    Args:
-        sub_begin_sequence: ``data_evaluate.features_sub_begin_sequence``.
-        n_samples: Number of predicted samples of one split.
-
-    Returns:
-        ``(groups, group_labels)``: the group index per sample and one label
-        per begin, or ``(None, None)`` without a sequence or samples.
-    """
-    if not sub_begin_sequence or n_samples == 0:
-        return None, None
-    n_groups = len(sub_begin_sequence)
-    assert n_samples % n_groups == 0, f"{n_samples=} not a multiple of {n_groups=}"
-    groups = np.arange(n_samples) // (n_samples // n_groups)
-    group_labels = [f"begin={k}" for k in sub_begin_sequence]
-    return groups, group_labels
 
 
 def _log_runtime(
@@ -514,7 +476,7 @@ def _plot_predictions(
             save (batch runs), False keeps figures open for ``plt.show()``.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    sub_begin_sequence = params["data_evaluate"].get("features_sub_begin_sequence")
+    sub_begin_sequence = eval_sub_begin_sequence(params)
 
     # plot predictions
     for key in eval_targets_data.keys():
@@ -530,8 +492,8 @@ def _plot_predictions(
         plot_targets_pred = [eval_targets_pred[key][:, i] for i in range(ntrg)]
         plot_name = [f"param_{i}" for i in range(ntrg)]
         # color by sub-interval begin
-        groups, group_labels = _sub_begin_groups(
-            sub_begin_sequence, eval_targets_data[key].shape[0]
+        groups, group_labels = sub_begin_groups(
+            eval_targets_data[key].shape[0], sub_begin_sequence
         )
         # plot true values vs. predictions
         path = output_dir / f"data_vs_predict_{key}"
