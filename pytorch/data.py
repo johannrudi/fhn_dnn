@@ -1065,9 +1065,11 @@ def create_dataloader(
     )
 
     if mode.any(Mode.TRAIN | Mode.PROFILE):
+        noise_idx_random = mode_data_params.get("noise_idx_random") or True
         shuffle = True
         drop_last = True
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
+        noise_idx_random = mode_data_params.get("noise_idx_random") or False
         shuffle = False
         drop_last = False
         if features_sub_begin_random:
@@ -1090,7 +1092,7 @@ def create_dataloader(
         features_sub_begin_random=features_sub_begin_random,
         features_sub_begin_sequence=features_sub_begin_sequence,
         features_sub_step=features_sub_step,
-        noise_idx_random=shuffle,
+        noise_idx_random=noise_idx_random,
         item_return_order=item_return_order,
     )
 
