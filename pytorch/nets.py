@@ -116,39 +116,60 @@ def _create_MLPResNet(
 
 def _create_convNet(input_channels, input_size, output_size, net_params, logger):
     activation_fn = _get_activation(net_params["activation_fn"])
-    use_dropout = net_params.get("dropout", False)
-    kernel = net_params.get("conv_layer_kernel", 3)
-    stride = net_params.get("conv_layer_stride", 2)
+    dropout = float(net_params.get("dropout") or 0.0)
+    kernel = net_params.get("conv_layer_kernels", 3)
+    stride = net_params.get("conv_layer_strides", 2)
     padding = net_params.get("conv_layer_padding", 0)
+    pool_output_size = net_params.get("pool_conv_output_size")
+    # convert integers to lists
     n_conv_layers = len(net_params["conv_layer_channels"])
-    # set parameters of convolution layers
-    hidden_conv_layers_kernels = n_conv_layers * [kernel]
-    hidden_conv_layers_kwargs = {"stride": stride, "padding": padding}
-    # calculate length of features after convolutional layers
-    n_channels = input_channels * net_params["conv_layer_channels"][-1]
-    n_features = input_size
-    for _ in range(n_conv_layers):
-        n_features = _get_conv1d_size(n_features, kernel, stride, padding)
-    flattened_input_size = n_channels * n_features
+    if isinstance(kernel, int):
+        kernel = n_conv_layers * [kernel]
+    if isinstance(stride, int):
+        stride = n_conv_layers * [stride]
     # create net
-    logger.info(f"create ConvNet({input_channels}, ..., {output_size}, ...)")
+    logger.info(f"create ConvNet({input_channels}, {input_size}, ...)")
     return ConvNet(
         # convolutional layers
         input_channels,
-        hidden_conv_layers_channels_mult=net_params["conv_layer_channels"],
-        hidden_conv_layers_kernels=hidden_conv_layers_kernels,
+        input_length=input_size,
+        hidden_conv_layers_channels=net_params.get("conv_layer_channels"),
+        hidden_conv_layers_channels_mult=net_params.get("conv_layer_channels_mult"),
+        hidden_conv_layers_kernels=kernel,
+        hidden_conv_layers_strides=stride,
         hidden_conv_layers_activation=activation_fn,
-        hidden_conv_layers_kwargs=hidden_conv_layers_kwargs,
+        hidden_conv_layers_kwargs={"padding": padding},
+        # pooling layer (optional)
+        pool_conv_output_size=pool_output_size,
         # dense layers
-        hidden_dense_input_size=flattened_input_size,
         hidden_dense_layers_sizes=net_params["dense_layer_sizes"],
         hidden_dense_layers_activation=activation_fn,
         # output layer
         output_size=output_size,
         output_layer_activation=None,
         # other
-        use_dropout=use_dropout,
+        dropout=dropout,
     )
+
+
+# Embed1D would be:
+#
+# ConvNet(
+#    3,
+#    hidden_conv_layers_channels=(32, 64, 64),
+#    hidden_conv_layers_kernels=(7, 7, 7),
+#    hidden_conv_layers_strides=(1, 2, 2),
+#    hidden_conv_layers_kwargs={"padding": 3},
+#    pool_conv_output_size=1,
+#    output_size=64,
+# )
+#
+# conv_layer_channels:   [32, 64, 64]
+# conv_layers_kernels:   [7, 7, 7]
+# conv_layer_strides:    [1, 2, 2]
+# conv_layer_padding:    3
+# pool_conv_output_size: 1
+# dense_layer_sizes:     []
 
 
 def _create_convResNet(
@@ -162,11 +183,16 @@ def _create_convResNet(
 ):
     dropout = float(net_params.get("dropout") or 0.0)
     spectral_norm = net_params.get("spectral_norm", False)
-    kernel = net_params.get("conv_layer_kernel", 3)
-    stride = net_params.get("conv_layer_stride", 2)
+    kernel = net_params.get("conv_layer_kernels", 3)
+    stride = net_params.get("conv_layer_strides", 2)
     padding = net_params.get("conv_layer_padding", 1)
     padding_mode = net_params.get("conv_layer_padding_mode", "replicate")
+    # convert integers to lists
     n_conv_layers = len(net_params["conv_layer_channels"])
+    if isinstance(kernel, int):
+        kernel = n_conv_layers * [kernel]
+    # NOTE: different strides per layer are not supported
+    assert isinstance(stride, int), type(stride)
     # set parameters of convolution block
     block_kwargs = dict(block_kwargs or {})
     block_kwargs["conv_kwargs"] = {
@@ -177,7 +203,7 @@ def _create_convResNet(
     }
     conv_resnet_params = {
         "channels_mult": net_params["conv_layer_channels"],
-        "kernels": n_conv_layers * [kernel],
+        "kernels": kernel,
         "dropout": dropout,
         "enable_spectral_norm": spectral_norm,
         "block_kwargs": block_kwargs,
@@ -185,8 +211,8 @@ def _create_convResNet(
     # calculate length of features after convolutional layers
     n_channels = input_channels * net_params["conv_layer_channels"][-1]
     n_features = input_size
-    for _ in range(n_conv_layers):
-        n_features = _get_conv1d_size(n_features, kernel, stride, padding)
+    for i in range(n_conv_layers):
+        n_features = _get_conv1d_size(n_features, kernel[i], stride, padding)
     # deep-copy so latent/target injection never mutates params in place
     residual_blocks_sizes = copy.deepcopy(net_params["residual_blocks_sizes"])
     flattened_input_size = (

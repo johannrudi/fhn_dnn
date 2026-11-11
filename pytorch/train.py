@@ -228,7 +228,7 @@ def main() -> None:
         parser = argparse.ArgumentParser()
         parameters.add_args_to_parser(
             parser,
-            default_params_path="configs/params_dnn.yaml",
+            default_params_path="configs/dnn.yaml",
             default_mode="train",
         )
         args = parser.parse_args(sys.argv[1:])

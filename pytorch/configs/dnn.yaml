@@ -52,13 +52,13 @@ net:
 #   spectral_norm: False
 
 #   type: "ConvNet"
-#   conv_layer_kernel: 3
+#   conv_layer_kernels: 3
 #   conv_layer_channels: [8, 16, 32]
 #   dense_layer_sizes: [128, 128, 128, 128]
 #   activation_fn: 'gelu'  # 'relu', 'silu' or 'swish', 'gelu'
 
     type: "ConvResNet"
-    conv_layer_kernel: 3
+    conv_layer_kernels: 3
     conv_layer_padding: 1
     conv_layer_channels: [8, 8, 8]
     residual_blocks_sizes:
