@@ -426,9 +426,9 @@ def load_data(
 
     # print sample sizes (as `load_arrays` reads them; no `Ntest` means all)
     Ntest = data_params.get("Ntest")
-    logger.info(f"Ntrain:    {data_params['Ntrain']}")
+    logger.info(f"Ntrain:      {data_params['Ntrain']}")
     logger.info(f"Nvalidation: {data_params.get('Nvalidation') or 0}")
-    logger.info(f"Ntest:     {Ntest if Ntest is not None else 'all'}")
+    logger.info(f"Ntest:       {Ntest if Ntest is not None else 'all'}")
 
     # print data shapes
     logger.debug(f"num_features: {params['data']['num_features']}")
@@ -451,6 +451,26 @@ def load_timesteps(record: dict[str, Any], data_params: dict[str, Any]) -> np.nd
         start, stop = length_range
         timesteps = timesteps[start:stop]
     return timesteps
+
+
+def load_sub_indices(data_params: dict[str, Any], filename: str) -> np.ndarray:
+    """Load the rows of a subset to use, from a file in `data_dir`.
+
+    The file is a `.npy` file holding a 1D integer array, at a path relative to
+    `data_dir` that must stay inside it. The indices count rows of the subset,
+    not of the split.
+    """
+    data_dir = pathlib.Path(data_params["data_dir"]).resolve()
+    path = (data_dir / filename).resolve()
+    if not path.is_relative_to(data_dir):
+        raise ValueError(f"sub_indices file {filename!r} is not inside {data_dir}")
+    sub_indices = np.load(path)
+    if sub_indices.ndim != 1 or not np.issubdtype(sub_indices.dtype, np.integer):
+        raise ValueError(
+            f"expected a 1D integer array in {path},"
+            f" got shape {sub_indices.shape}, dtype {sub_indices.dtype}"
+        )
+    return sub_indices
 
 
 # ---------------------------------------
@@ -780,6 +800,9 @@ class FHN_Dataset(Dataset):
 
     With `features_sub_begin_sequence`, the dataset holds one contiguous block of
     rows per begin; `sub_begin_rows` gives the rows of each begin.
+
+    With `sub_indices`, the dataset holds only those rows of the arrays, in that
+    order: its row `i` is row `sub_indices[i]` of the arrays.
     """
 
     def __init__(
@@ -796,6 +819,7 @@ class FHN_Dataset(Dataset):
         features_sub_step: int | None = None,
         noise_idx_random: bool = True,
         item_return_order: str = "yx",
+        sub_indices: np.ndarray | torch.Tensor | None = None,
     ) -> None:
         """Keep the arrays as tensors, and the options for drawing samples."""
         super().__init__()
@@ -854,6 +878,25 @@ class FHN_Dataset(Dataset):
         else:
             raise NotImplementedError()
 
+        # map rows of the dataset to rows of the arrays
+        if sub_indices is not None:
+            self.sub_indices = torch.as_tensor(sub_indices, dtype=torch.long)
+            if self.sub_indices.ndim != 1 or self.sub_indices.numel() == 0:
+                raise ValueError(
+                    f"expected non-empty 1D sub_indices, got shape {tuple(self.sub_indices.shape)}"
+                )
+            if (
+                self.sub_indices.min() < 0
+                or self.dataset_size <= self.sub_indices.max()
+            ):
+                raise ValueError(
+                    f"sub_indices must be in [0, {self.dataset_size}), got values in"
+                    f" [{self.sub_indices.min()}, {self.sub_indices.max()}]"
+                )
+            self.dataset_size = self.sub_indices.size(0)
+        else:
+            self.sub_indices = None
+
         # set from arguments
         self.features_additive_noise_std = features_additive_noise_std
         self.features_transform_fn = features_transform_fn
@@ -888,6 +931,9 @@ class FHN_Dataset(Dataset):
             else:
                 sub_idx = [i // self.dataset_size for i in idx]
                 idx = [i % self.dataset_size for i in idx]
+        # map to rows of the arrays (an int stays an int, a list stays a list)
+        if self.sub_indices is not None:
+            idx = self.sub_indices[idx].tolist()
         # get feature sample
         if self.features is not None:
             features = self.features[idx]
@@ -1038,8 +1084,10 @@ def create_dataloader(
     data_params = params["data"]
     if mode.any(Mode.TRAIN | Mode.PROFILE):
         mode_data_params = params["data_train"]
-    else:
+    elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         mode_data_params = params["data_evaluate"]
+    else:
+        raise NotImplementedError()
     features_additive_noise_std = (
         mode_data_params.get("features_additive_noise_std") or 0.0
     )
@@ -1068,10 +1116,16 @@ def create_dataloader(
         noise_idx_random = mode_data_params.get("noise_idx_random") or True
         shuffle = True
         drop_last = True
+        if mode_data_params.get("sub_indices"):
+            sub_indices = load_sub_indices(data_params, mode_data_params["sub_indices"])
+            logger.info(
+                f"sub_indices: {len(sub_indices)} rows from {mode_data_params['sub_indices']}"
+            )
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
         noise_idx_random = mode_data_params.get("noise_idx_random") or False
         shuffle = False
         drop_last = False
+        sub_indices = None
         if features_sub_begin_random:
             logger.warning(
                 f"features_sub_begin_random is active in a non-training mode"
@@ -1094,6 +1148,7 @@ def create_dataloader(
         features_sub_step=features_sub_step,
         noise_idx_random=noise_idx_random,
         item_return_order=item_return_order,
+        sub_indices=sub_indices,
     )
 
     # create distributed data sampler (only for distributed training)
@@ -1129,6 +1184,15 @@ def create_dataloader(
         persistent_workers=dataloader_config.persistent_workers,
         multiprocessing_context=dataloader_config.multiprocessing_context,
     )
+
+    # with `drop_last`, a dataset smaller than a batch leaves no batches, and
+    # training would run without a single optimizer step
+    if drop_last and len(dataloader) == 0:
+        raise ValueError(
+            f"no training batches: the dataset has {len(dataset)} rows"
+            f" ({ctx.world_size} rank(s)), fewer than the local batch size"
+            f" {local_batch_size}; reduce `data_train.batch_size`"
+        )
 
     # output
     return dataloader
