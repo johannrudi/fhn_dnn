@@ -328,17 +328,17 @@ _DATA_ONLY_KEYS = (
 )
 
 
-# old names of keys
-_RENAMED_KEYS = {"Nvalidate": "Nvalidation"}
+# keys that are not supported any more
+_REMOVED_KEYS = ("Nvalidate", "features_additive_noise_std")
 
 
 def _check_data_only_keys(params: dict[str, Any]) -> None:
     """Raise if a key of the `data` block is set in `data_train` or `data_evaluate`,
-    or if a key still has its old name."""
+    or if a key is not supported any more."""
     for block in ("data", "data_train", "data_evaluate"):
-        for old, new in _RENAMED_KEYS.items():
-            if old in params.get(block, {}):
-                raise ValueError(f"rename `{old}` to `{new}` in `{block}`")
+        for key in _REMOVED_KEYS:
+            if key in params.get(block, {}):
+                raise ValueError(f"`{key}` in `{block}` is not supported any more")
     for block in ("data_train", "data_evaluate"):
         misplaced = [key for key in _DATA_ONLY_KEYS if key in params.get(block, {})]
         if misplaced:
@@ -599,15 +599,16 @@ def preprocess_features(
     features: DictArray,
     record: dict[str, Any],
     data_params: dict[str, Any],
+    *,
+    is_std: bool = False,
 ) -> None:
     """Scale ODE features or noise features with the scale of a record.
 
-    For noise features, pass the record that matches their role: the noise
-    record when the noise is the features (features type NOISE), the ODE
-    record when the noise is added to the ODE features (TIME_NOISE), so both
-    are in the same units. The noise then also gets the features' `add`,
-    which offsets their sum by `add * mult`; that offset is constant and
-    accepted.
+    Noise features get the scale of the noise record. When the noise is added
+    to the ODE features (features type TIME_NOISE), pass `is_std` so that only
+    `mult` is applied: the noise is zero mean and must not be shifted by
+    `add`. It then has unit std, and `features_noise_scaling` sets its std
+    relative to the scaled ODE features.
 
     Scales only when `features_normalize` is set; NaN values of stats are
     replaced either way.
@@ -620,7 +621,7 @@ def preprocess_features(
     # apply scaling
     if data_params.get("features_normalize", False):
         channels_range = data_params.get("features_use_channels_range")
-        apply_scale(features, get_scale(record, kind, channels_range))
+        apply_scale(features, get_scale(record, kind, channels_range), is_std=is_std)
 
     # replace nan values
     if kind == "stats":
@@ -803,6 +804,11 @@ class FHN_Dataset(Dataset):
 
     With `sub_indices`, the dataset holds only those rows of the arrays, in that
     order: its row `i` is row `sub_indices[i]` of the arrays.
+
+    Noise added to the features is scaled by `features_noise_scaling`: the
+    stored `features_noise`, when it is added to the ODE features, and the
+    i.i.d. Gaussian noise of `features_noise_iid_gaussian`. When the stored
+    noise is the features (no ODE features), it is not scaled.
     """
 
     def __init__(
@@ -811,7 +817,8 @@ class FHN_Dataset(Dataset):
         targets: np.ndarray | torch.Tensor | None,
         features_noise: np.ndarray | torch.Tensor | None = None,
         targets_noise: np.ndarray | torch.Tensor | None = None,
-        features_additive_noise_std: float = 0.0,
+        features_noise_iid_gaussian: bool = False,
+        features_noise_scaling: float = 1.0,
         features_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
         features_sub_length: int | None = None,
         features_sub_begin_random: bool = False,
@@ -898,7 +905,8 @@ class FHN_Dataset(Dataset):
             self.sub_indices = None
 
         # set from arguments
-        self.features_additive_noise_std = features_additive_noise_std
+        self.features_noise_iid_gaussian = features_noise_iid_gaussian
+        self.features_noise_scaling = features_noise_scaling
         self.features_transform_fn = features_transform_fn
         self.features_sub_length = features_sub_length
         self.features_sub_begin_random = features_sub_begin_random
@@ -942,24 +950,27 @@ class FHN_Dataset(Dataset):
                     noise_idx = torch.randint(self.features_noise.size(0), (1,))[0]
                 else:
                     noise_idx = idx
-                features_transformed = features + self.features_noise[noise_idx]
+                features_transformed = (
+                    features
+                    + self.features_noise_scaling * self.features_noise[noise_idx]
+                )
             else:
                 noise_idx = None
                 features_transformed = features
         elif self.features_noise is not None:
+            # the noise is the features, so it is not scaled
             features = self.features_noise[idx]
             features_transformed = features
         else:
             features = None
             features_transformed = None
-        # apply additive i.i.d. noise
+        # apply additive i.i.d. Gaussian noise
         # NOTE: Do not add in place. `features_transformed` can be a view of
         #       the stored data, which may be a read-only memory map.
-        if features_transformed is not None and self.features_additive_noise_std:
+        if features_transformed is not None and self.features_noise_iid_gaussian:
             features_transformed = (
                 features_transformed
-                + self.features_additive_noise_std
-                * torch.randn(features_transformed.size())
+                + self.features_noise_scaling * torch.randn_like(features_transformed)
             )
         # truncate features array
         if (
@@ -1088,9 +1099,10 @@ def create_dataloader(
         mode_data_params = params["data_evaluate"]
     else:
         raise NotImplementedError()
-    features_additive_noise_std = (
-        mode_data_params.get("features_additive_noise_std") or 0.0
+    features_noise_iid_gaussian = mode_data_params.get(
+        "features_noise_iid_gaussian", False
     )
+    features_noise_scaling = mode_data_params.get("features_noise_scaling", 1.0)
     features_sub_length = data_params.get("features_sub_length") or 0
     features_sub_begin_random = (
         mode_data_params.get("features_sub_begin_random") or False
@@ -1113,16 +1125,17 @@ def create_dataloader(
     )
 
     if mode.any(Mode.TRAIN | Mode.PROFILE):
-        noise_idx_random = mode_data_params.get("noise_idx_random") or True
+        noise_idx_random = mode_data_params.get("noise_idx_random", True)
         shuffle = True
         drop_last = True
+        sub_indices = None
         if mode_data_params.get("sub_indices"):
             sub_indices = load_sub_indices(data_params, mode_data_params["sub_indices"])
             logger.info(
                 f"sub_indices: {len(sub_indices)} rows from {mode_data_params['sub_indices']}"
             )
     elif mode.any(Mode.VALIDATE | Mode.PREDICT | Mode.EVAL):
-        noise_idx_random = mode_data_params.get("noise_idx_random") or False
+        noise_idx_random = mode_data_params.get("noise_idx_random", False)
         shuffle = False
         drop_last = False
         sub_indices = None
@@ -1140,7 +1153,8 @@ def create_dataloader(
         targets,
         features_noise=features_noise,
         targets_noise=targets_noise,
-        features_additive_noise_std=features_additive_noise_std,
+        features_noise_iid_gaussian=features_noise_iid_gaussian,
+        features_noise_scaling=features_noise_scaling,
         features_transform_fn=features_transform_fn,
         features_sub_length=features_sub_length,
         features_sub_begin_random=features_sub_begin_random,

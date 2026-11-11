@@ -15,19 +15,22 @@ data:  # options shared by training and evaluation
     Nvalidation: 1000
     Ntest:       2000
     # use encoder network of an autoencoder
-    # autoencoder_load_dir: 'runs/ae'
-    # autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
-    # num_features: [1, 16]  # adjust to AE latent size
+    ##autoencoder_load_dir: 'runs/ae'
+    ##autoencoder_latent_size: 16  # e.g., 2, 4, 16, 64, 125
+    ##num_features: [1, 16]  # adjust to AE latent size
 
 data_train:  # options only for training
     features_sub_begin_random: True # flag to pick a sub interval at random
-    # features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
-    features_additive_noise_std: 0  # add i.i.d. noise
+    ##features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
+    features_noise_iid_gaussian: False
+    features_noise_scaling: 1.0     # add noise without scaling (assume normalization is off)
+    ##sub_indices: "train_sub_indices.npy"  # train only on these rows of the train subset (.npy file in `data_dir`)
     batch_size: 128
 
 data_evaluate:  # options only for evaluation
     features_sub_begin_sequence: [0, 100, 200]  # choices to begin sub intervals
-    features_additive_noise_std: 0  # add i.i.d. noise
+    features_noise_iid_gaussian: False
+    features_noise_scaling: 1.0     # add noise without scaling (assume normalization is off)
     batch_size: 128
 
 dataloader:

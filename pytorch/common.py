@@ -138,14 +138,16 @@ def load_and_preprocess_data(
     preprocess_features(features, ode_record, data_params)
     preprocess_targets(targets, ode_record, data_params)
     if dictarray_is_not_none(features_noise):
-        # noise that is the features gets the noise record's scale; noise added
-        # to the ODE features gets theirs (see `preprocess_features`)
-        if data_params["features_type"].casefold() == "noise":
-            noise_record = records["noise"]
-        else:
-            noise_record = ode_record
+        # noise gets the noise record's scale; noise added to the ODE features
+        # gets only its `mult`, as it is zero mean (see `preprocess_features`)
+        noise_record = records["noise"]
         assert noise_record is not None
-        preprocess_features(features_noise, noise_record, data_params)
+        preprocess_features(
+            features_noise,
+            noise_record,
+            data_params,
+            is_std=data_params["features_type"].casefold() != "noise",
+        )
     if dictarray_is_not_none(targets_noise):
         noise_record = records["noise"]
         assert noise_record is not None

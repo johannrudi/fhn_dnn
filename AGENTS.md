@@ -127,7 +127,7 @@ All experiments are configured via YAML files in `pytorch/configs/`:
 
 **Key configuration sections:**
 - `data`: options shared by training and evaluation: `data_dir`, feature/target types, channel and length ranges, sub-interval length and step, normalization flags, subset sizes `Ntrain`/`Nvalidation`/`Ntest`
-- `data_train`, `data_evaluate`: only what differs between the modes: batch sizes, `features_sub_begin_random`/`features_sub_begin_sequence`, `features_additive_noise_std`. `load_data` raises if a shared key appears here, and if a config still uses the old name `Nvalidate`.
+- `data_train`, `data_evaluate`: only what differs between the modes: batch sizes, `features_sub_begin_random`/`features_sub_begin_sequence`, `features_noise_iid_gaussian`/`features_noise_scaling`. `load_data` raises if a shared key appears here, and if a config still uses a removed key (`Nvalidate`, `features_additive_noise_std`).
 - `net`: network architecture, layer sizes, activation functions
 - `optimizer`: optimizer type, learning rate, scheduler settings
 - `training`: number of epochs
