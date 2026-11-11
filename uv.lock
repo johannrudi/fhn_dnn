@@ -630,6 +630,7 @@ dev = [
     { name = "ipykernel", specifier = ">=6,<8" },
     { name = "isort", specifier = ">=5,<6" },
     { name = "pytest", specifier = ">=8,<9" },
+    { name = "reuse", specifier = ">=6.2,<7" },
     { name = "zensical", specifier = ">=0.0.71" },
 ]
 xpu = [
