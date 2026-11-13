@@ -115,8 +115,9 @@ def _create_MLPResNet(
 
 
 def _create_convNet(input_channels, input_size, output_size, net_params, logger):
-    activation_fn = _get_activation(net_params["activation_fn"])
+    activation_fn = _get_activation(net_params.get("activation_fn", "relu"))
     dropout = float(net_params.get("dropout") or 0.0)
+    spectral_norm = net_params.get("spectral_norm", False)
     kernel = net_params.get("conv_layer_kernels", 3)
     stride = net_params.get("conv_layer_strides", 2)
     padding = net_params.get("conv_layer_padding", 0)
@@ -149,27 +150,8 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
         output_layer_activation=None,
         # other
         dropout=dropout,
+        enable_spectral_norm=spectral_norm,
     )
-
-
-# Embed1D would be:
-#
-# ConvNet(
-#    3,
-#    hidden_conv_layers_channels=(32, 64, 64),
-#    hidden_conv_layers_kernels=(7, 7, 7),
-#    hidden_conv_layers_strides=(1, 2, 2),
-#    hidden_conv_layers_kwargs={"padding": 3},
-#    pool_conv_output_size=1,
-#    output_size=64,
-# )
-#
-# conv_layer_channels:   [32, 64, 64]
-# conv_layers_kernels:   [7, 7, 7]
-# conv_layer_strides:    [1, 2, 2]
-# conv_layer_padding:    3
-# pool_conv_output_size: 1
-# dense_layer_sizes:     []
 
 
 def _create_convResNet(
