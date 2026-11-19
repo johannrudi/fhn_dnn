@@ -693,6 +693,8 @@ def get_representative_samples(
     record: dict[str, Any],
     data_params: dict[str, Any],
     subset_name: SubsetName,
+    *,
+    offset_rows_by_split: bool = False,
 ) -> np.ndarray:
     """Indices into one subset of the record's representative samples.
 
@@ -700,7 +702,8 @@ def get_representative_samples(
     its own subsets. Those of the record's subset with the same name are
     taken; as the subsets cut by `Ntrain`, `Nvalidation`, and `Ntest` need not
     match the record's, only the rows inside the subset are kept, counted
-    from the subset's first row.
+    from the subset's first row. With `offset_rows_by_split`, they are kept as
+    rows of the split instead.
     """
     n_train_split = record["config"]["splits"]["train"]
     n_test_split = record["config"]["splits"]["test"]
@@ -711,7 +714,7 @@ def get_representative_samples(
         data_params.get("Ntest"),
     )
 
-    # rows of the subset within its split
+    # get rows of the subset within its split
     if subset_name == "train":
         rows = range(n_train_split)[train]
     elif subset_name == "validation":
@@ -722,10 +725,11 @@ def get_representative_samples(
         assert_never(subset_name)
 
     # keep the representative rows that fall in the subset
+    offset = 0 if offset_rows_by_split else rows.start
     positions = []
     for row in record["index_sets"][subset_name]["representative"]["rows"]:
         if row in rows:
-            positions.append(row - rows.start)
+            positions.append(row - offset)
     return np.array(positions, dtype=np.int64)
 
 
