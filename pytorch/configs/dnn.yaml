@@ -5,7 +5,7 @@ data:  # options shared by training and evaluation
     features_type: "TIME_NOISE"     # 'TIME', 'TIME_NOISE', 'RATE_DURATION'/'ODE_STATS', 'NOISE'
     features_use_channels_range: [0, 1]
     features_sub_length: 800        # use sub interval of this size
-    features_sub_step: 1            # subsample by this step size
+    features_sub_stride: 1          # subsample by this stride
     ##features_fft: True              # concatenate features with their FFT (needs setting of `num_features`)
     ##num_features: [3, 500]
     targets_type: "ODE"             # 'ODE', 'ODE_NOISE', 'NOISE'

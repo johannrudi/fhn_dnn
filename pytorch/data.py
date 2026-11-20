@@ -321,7 +321,7 @@ _DATA_ONLY_KEYS = (
     "features_use_channels_range",
     "features_use_length_range",
     "features_sub_length",
-    "features_sub_step",
+    "features_sub_stride",
     "Ntrain",
     "Nvalidation",
     "Ntest",
@@ -329,7 +329,7 @@ _DATA_ONLY_KEYS = (
 
 
 # keys that are not supported any more
-_REMOVED_KEYS = ("Nvalidate", "features_additive_noise_std")
+_REMOVED_KEYS = ("Nvalidate", "features_additive_noise_std", "features_sub_step")
 
 
 def _check_data_only_keys(params: dict[str, Any]) -> None:
@@ -405,13 +405,10 @@ def load_data(
             and data_params["features_sub_length"] < params["data"]["num_features"][-1]
         ):
             params["data"]["num_features"][-1] = data_params["features_sub_length"]
-        if (
-            data_params.get("features_sub_step")
-            and 1 < data_params["features_sub_step"]
-        ):
-            params["data"]["num_features"][-1] = (
-                params["data"]["num_features"][-1] // data_params["features_sub_step"]
-            )
+        if (stride := data_params.get("features_sub_stride")) and 1 < stride:
+            # ceil division: `[::stride]` keeps the first of each `stride` steps
+            num_features = params["data"]["num_features"]
+            num_features[-1] = -(-num_features[-1] // stride)
 
     # set targets sizes
     if "num_targets" not in params["data"]:
@@ -857,7 +854,7 @@ class FHN_Dataset(Dataset):
         features_sub_length: int | None = None,
         features_sub_begin_random: bool = False,
         features_sub_begin_sequence: list[int] | None = None,
-        features_sub_step: int | None = None,
+        features_sub_stride: int | None = None,
         noise_idx_random: bool = True,
         item_return_order: str = "yx",
         sub_indices: np.ndarray | torch.Tensor | None = None,
@@ -952,7 +949,7 @@ class FHN_Dataset(Dataset):
                 f"unknown {item_return_order=}, expected one of {_ITEM_RETURN_ORDERS}"
             )
         self.item_return_order: ItemReturnOrder = item_return_order
-        self.features_sub_step = features_sub_step
+        self.features_sub_stride = features_sub_stride
 
     def __len__(self) -> int:
         """Number of samples, times the number of sub-interval starts if given."""
@@ -1039,15 +1036,11 @@ class FHN_Dataset(Dataset):
             else:
                 features = features[..., :K]
                 features_transformed = features_transformed[..., :K]
-        # truncate features with step length
-        if (
-            self.features_sub_step
-            and 1 < self.features_sub_step
-            and features is not None
-        ):
+        # subsample features with stride
+        if (stride := self.features_sub_stride) and 1 < stride and features is not None:
             assert features_transformed is not None
-            features = features[..., :: self.features_sub_step]
-            features_transformed = features_transformed[..., :: self.features_sub_step]
+            features = features[..., ::stride]
+            features_transformed = features_transformed[..., ::stride]
         # transform features
         if features_transformed is not None and self.features_transform_fn is not None:
             features_transformed = self.features_transform_fn(
@@ -1150,7 +1143,7 @@ def create_dataloader(
         features_sub_begin_sequence = mode_data_params.get(
             "features_sub_begin_sequence"
         )
-    features_sub_step = data_params.get("features_sub_step")
+    features_sub_stride = data_params.get("features_sub_stride")
     item_return_order = params["dataloader"]["item_return_order"]
 
     if features_sub_length and not 1 < features_sub_length:
@@ -1201,7 +1194,7 @@ def create_dataloader(
         features_sub_length=features_sub_length,
         features_sub_begin_random=features_sub_begin_random,
         features_sub_begin_sequence=features_sub_begin_sequence,
-        features_sub_step=features_sub_step,
+        features_sub_stride=features_sub_stride,
         noise_idx_random=noise_idx_random,
         item_return_order=item_return_order,
         sub_indices=sub_indices,
