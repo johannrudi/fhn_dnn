@@ -743,6 +743,36 @@ def eval_sub_begin_sequence(params: dict[str, Any]) -> list[int] | None:
     return params["data_evaluate"].get("features_sub_begin_sequence")
 
 
+def eval_sub_begin_linspace(
+    params: dict[str, Any], data_length: int
+) -> list[int] | None:
+    """Returns the evenly spaced sub-interval begins of `data_evaluate.features_sub_begin_linspace`.
+
+    For `n = features_sub_begin_linspace`, the begins are
+    `np.linspace(0, data_length - features_sub_length, n)`, rounded, so that the
+    last sub-interval ends at the end of the data. Returns None when the option
+    is not set.
+    """
+    n = params["data_evaluate"].get("features_sub_begin_linspace")
+    if not n:
+        return None
+    if n < 1:
+        raise ValueError(f"expected features_sub_begin_linspace >= 1, got {n!r}")
+    sub_length = params["data"].get("features_sub_length")
+    if not sub_length or data_length < sub_length:
+        raise ValueError(
+            f"features_sub_begin_linspace needs 0 < features_sub_length <= {data_length}"
+            f" (the data length), got {sub_length}"
+        )
+    begins = np.linspace(0, data_length - sub_length, n).round().astype(int).tolist()
+    if len(set(begins)) < n:
+        raise ValueError(
+            f"features_sub_begin_linspace = {n} gives duplicate begins {begins};"
+            f" use at most {data_length - sub_length + 1}"
+        )
+    return begins
+
+
 def sub_begin_rows(
     n_rows: int, sub_begin_sequence: list[int] | None
 ) -> list[tuple[int | None, slice]]:
@@ -1090,9 +1120,14 @@ def create_dataloader(
     ctx: distributed.DistributedContext,
     *,
     features_transform_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    features_sub_begin_sequence: list[int] | None = None,
     base_seed: int = 0,
 ) -> DataLoader:
     """Creates a PyTorch dataset and dataloader from numpy arrays.
+
+    `features_sub_begin_sequence` replaces the sub-interval begins of the mode's
+    params; None means to read them from the params.
+
     Ref: https://pytorch.org/docs/stable/data.html
     """
     # options shared by the modes, and options of this mode
@@ -1111,7 +1146,10 @@ def create_dataloader(
     features_sub_begin_random = (
         mode_data_params.get("features_sub_begin_random") or False
     )
-    features_sub_begin_sequence = mode_data_params.get("features_sub_begin_sequence")
+    if features_sub_begin_sequence is None:
+        features_sub_begin_sequence = mode_data_params.get(
+            "features_sub_begin_sequence"
+        )
     features_sub_step = data_params.get("features_sub_step")
     item_return_order = params["dataloader"]["item_return_order"]
 
