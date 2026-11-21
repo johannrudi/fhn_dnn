@@ -796,8 +796,12 @@ def sub_begin_label(begin: int | None) -> str:
     return "" if begin is None else f"begin={begin}"
 
 
-def sub_begin_suffix(begin: int | None) -> str:
-    """Suffix of a begin for file names; empty for None, so names stay unchanged."""
+def sub_begin_tag(begin: int | None) -> str:
+    """Returns the tag of a begin for file names, `_begin{begin}`.
+
+    The tag carries its leading `_`, so that it is empty for None and names
+    without a begin stay unchanged.
+    """
     return "" if begin is None else f"_begin{begin}"
 
 
