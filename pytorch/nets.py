@@ -7,48 +7,28 @@ import enum
 import logging
 import math
 import pathlib
+from collections.abc import Callable
+from typing import Any, Self
 
 import dlk.nets.efficientnet1d as efficientnet
+import dlk.opt.distributed as distributed
 import torch
 import torch.nn as nn
 from dlk.nets.autoencoder import Autoencoder
 from dlk.nets.conv1d import ConvNet, ConvResNet
-from dlk.nets.efficientnet1d import EfficientNetV2BB0
 from dlk.nets.mlp import MLPNet, MLPNet_MultIn, MLPResNet
 from dlk.nets.transformer1d import ChannelWiseTransformerNet, TransformerNet
 from dlk.nets.unet import DecoderNet1d_2021 as DecoderConvNet
 from dlk.nets.unet import EncoderNet1d_2021 as EncoderConvNet
 from dlk.nets.unet import UNet1d_2021 as UNet
 from dlk.nets.utils import get_parameters
-from dlk.opt import distributed
 
 # --------------------------------------
-# Neural Network Types
-# --------------------------------------
-
-
-class NetworkType(enum.Enum):
-    MLPNET = enum.auto()
-    MLPRESNET = enum.auto()
-    CONVNET = enum.auto()
-    CONVRESNET = enum.auto()
-    EFFICIENTNET = enum.auto()
-    TRANSFORMERNET = enum.auto()
-
-    @classmethod
-    def get_from_name(cls, name):
-        for type in cls:
-            if type.name == name.upper():
-                return type
-        raise ValueError(f"Unknown name for model type: {repr(name)}")
-
-
-# --------------------------------------
-# Neural Networks for Inverse Maps
+# Neural Network Builders
 # --------------------------------------
 
 
-def _get_activation(name):
+def _get_activation(name: str) -> nn.Module:
     if "relu" == name.casefold():
         return nn.ReLU()
     elif "gelu" == name.casefold():
@@ -59,15 +39,24 @@ def _get_activation(name):
         raise ValueError("Unknown name for activation function: " + name)
 
 
-def _get_conv1d_size(in_length, kernel, stride=1, padding=0, dilation=1):
+def _get_conv1d_size(
+    in_length: int, kernel: int, stride: int = 1, padding: int = 0, dilation: int = 1
+) -> int:
     return int((in_length + 2 * padding - dilation * (kernel - 1) - 1) / stride + 1)
 
 
-def _create_MLPNet(input_channels, input_size, output_size, net_params, logger):
+def build_MLPNet(
+    net_cls: type[MLPNet_MultIn],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
+) -> MLPNet_MultIn:
     logger.info(
-        f"create MLPNet_MultIn({input_channels * input_size}, {output_size}, ...)"
+        f"create {net_cls.__name__}({input_channels * input_size}, {output_size}, ...)"
     )
-    return MLPNet_MultIn(
+    return net_cls(
         input_channels * input_size,
         output_size,
         hidden_layers_sizes=net_params["dense_layer_sizes"],
@@ -77,14 +66,15 @@ def _create_MLPNet(input_channels, input_size, output_size, net_params, logger):
     )
 
 
-def _create_MLPResNet(
-    input_channels,
-    input_size,
-    output_size,
-    net_params,
-    logger,
+def build_MLPResNet(
+    net_cls: type[MLPResNet],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
     hidden_input_size: int | list[int] = 0,
-):
+) -> MLPResNet:
     embed_size = net_params.get("embedding_size", 1)
     # deep-copy so latent/target injection never mutates params in place
     residual_blocks_sizes = copy.deepcopy(net_params["residual_blocks_sizes"])
@@ -100,8 +90,10 @@ def _create_MLPResNet(
         for i in range(len(residual_blocks_sizes)):
             residual_blocks_sizes[i][0] += hidden_input_size[i]
     # create net
-    logger.info(f"create MLPResNet({flattened_input_size}, {output_size}, ...)")
-    return MLPResNet(
+    logger.info(
+        f"create {net_cls.__name__}({flattened_input_size}, {output_size}, ...)"
+    )
+    return net_cls(
         flattened_input_size,
         output_size,
         embedding_size=embed_size,
@@ -114,7 +106,14 @@ def _create_MLPResNet(
     )
 
 
-def _create_convNet(input_channels, input_size, output_size, net_params, logger):
+def build_ConvNet(
+    net_cls: type[ConvNet],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
+) -> ConvNet:
     activation_fn = _get_activation(net_params.get("activation_fn", "relu"))
     dropout = float(net_params.get("dropout") or 0.0)
     spectral_norm = net_params.get("spectral_norm", False)
@@ -129,8 +128,8 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
     if isinstance(stride, int):
         stride = n_conv_layers * [stride]
     # create net
-    logger.info(f"create ConvNet({input_channels}, {input_size}, ...)")
-    return ConvNet(
+    logger.info(f"create {net_cls.__name__}({input_channels}, {input_size}, ...)")
+    return net_cls(
         # convolutional layers
         input_channels,
         input_length=input_size,
@@ -154,15 +153,16 @@ def _create_convNet(input_channels, input_size, output_size, net_params, logger)
     )
 
 
-def _create_convResNet(
-    input_channels,
-    input_size,
-    output_size,
-    net_params,
-    logger,
-    block_kwargs: dict | None = None,
+def build_ConvResNet(
+    net_cls: type[ConvResNet],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
+    block_kwargs: dict[str, Any] | None = None,
     mlp_block_hidden_input_size: int | list[int] = 0,
-):
+) -> ConvResNet:
     dropout = float(net_params.get("dropout") or 0.0)
     spectral_norm = net_params.get("spectral_norm", False)
     kernel = net_params.get("conv_layer_kernels", 3)
@@ -219,8 +219,8 @@ def _create_convResNet(
         "enable_spectral_norm": spectral_norm,
     }
     # create net
-    logger.info(f"create ConvResNet({input_channels}, {input_size}, ...)")
-    return ConvResNet(
+    logger.info(f"create {net_cls.__name__}({input_channels}, {input_size}, ...)")
+    return net_cls(
         input_channels,
         input_length=input_size,
         conv_resnet_params=conv_resnet_params,
@@ -228,48 +228,66 @@ def _create_convResNet(
     )
 
 
-def _create_efficientNet(input_channels, input_size, output_size, net_params, logger):
+def build_EfficientNet(
+    net_cls: Callable[..., efficientnet.ScalableEfficientNet1D],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
+) -> efficientnet.ScalableEfficientNet1D:
     dropout = net_params.get("dropout", 0.0)
-    spectral_norm = net_params.get("spectral_norm", False)
-    logger.info(
-        f"create EfficientNet({input_channels}, {input_size}, {output_size}, ...)"
-    )
-    if spectral_norm:
-        return EfficientNetV2BB0(
-            input_channels=input_channels,
-            input_length=input_size,
-            num_classes=output_size,
-            block_dropout=dropout,
-            head=efficientnet.HeadConfig(dropout=dropout),
-            style=efficientnet.NET_SN_EFBN_SHGN,
-        )
+    if net_params.get("spectral_norm", False):
+        style = efficientnet.NET_SN_EFBN_SHGN
     else:
-        return EfficientNetV2BB0(
-            input_channels=input_channels,
-            input_length=input_size,
-            num_classes=output_size,
-            block_dropout=dropout,
-            head=efficientnet.HeadConfig(dropout=dropout),
-            style=efficientnet.NET_EFBN_SHGN,
-        )
+        style = efficientnet.NET_EFBN_SHGN
+    logger.info(
+        f"create {net_cls.__name__}({input_channels}, {input_size}, {output_size}, ...)"
+    )
+    return net_cls(
+        input_channels=input_channels,
+        input_length=input_size,
+        num_classes=output_size,
+        block_dropout=dropout,
+        head=efficientnet.HeadConfig(dropout=dropout),
+        style=style,
+    )
 
 
-def _create_transformerNet(input_channels, input_size, output_size, net_params, logger):
+def build_TransformerNet(
+    net_cls: type[TransformerNet] | type[ChannelWiseTransformerNet],
+    input_channels: int,
+    input_size: int,
+    output_size: int,
+    net_params: dict[str, Any],
+    logger: logging.Logger,
+) -> TransformerNet | ChannelWiseTransformerNet:
     patch_size = net_params.get("patch_size", input_size // 10)
-    embed_size = net_params.get("embedding_size")
-    attn_n_heads = net_params.get("attention_layers_n_heads")
     dropout = net_params.get("dropout", 0.0)
-    if 1 == input_channels:
+    # forward only keys that are set, so the network's own defaults apply otherwise
+    optional_kwargs = {
+        kwarg: net_params[key]
+        for key, kwarg in (
+            ("embedding_size", "embedding_size"),
+            ("attention_layers_n_heads", "attn_n_heads"),
+        )
+        if net_params.get(key) is not None
+    }
+    if TransformerNet is net_cls:
+        if 1 != input_channels:
+            raise ValueError(
+                f"TransformerNet requires 1 input channel, got {input_channels}; "
+                "use ChannelWiseTransformerNet"
+            )
         logger.info(f"create TransformerNet({input_size}, {output_size}, ...)")
         return TransformerNet(
             input_seq_size=input_size,
             output_size=output_size,
             patch_size=patch_size,
-            embedding_size=embed_size,
-            attn_n_heads=attn_n_heads,
             dropout=dropout,
+            **optional_kwargs,
         )
-    else:
+    elif ChannelWiseTransformerNet is net_cls:
         logger.info(
             f"create ChannelWiseTransformerNet({input_channels}, {input_size}, {output_size}, ...)"
         )
@@ -278,31 +296,88 @@ def _create_transformerNet(input_channels, input_size, output_size, net_params, 
             input_seq_size=input_size,
             output_size=output_size,
             patch_size=patch_size,
-            embedding_size=embed_size,
-            attn_n_heads=attn_n_heads,
             dropout=dropout,
+            **optional_kwargs,
+        )
+    else:
+        raise ValueError(f"unknown transformer class: {net_cls}")
+
+
+# --------------------------------------
+# Neural Network Types
+# --------------------------------------
+
+
+class NetworkType(enum.Enum):
+    """Map config names (case-insensitive) to a category builder and a network class."""
+
+    MLPNET = (build_MLPNet, MLPNet_MultIn)
+    MLPRESNET = (build_MLPResNet, MLPResNet)
+    CONVNET = (build_ConvNet, ConvNet)
+    CONVRESNET = (build_ConvResNet, ConvResNet)
+    EFFICIENTNETV1BB0 = (build_EfficientNet, efficientnet.EfficientNetV1BB0)
+    EFFICIENTNETV1B0 = (build_EfficientNet, efficientnet.EfficientNetV1B0)
+    EFFICIENTNETV1B2 = (build_EfficientNet, efficientnet.EfficientNetV1B2)
+    EFFICIENTNETV2BB0 = (build_EfficientNet, efficientnet.EfficientNetV2BB0)
+    EFFICIENTNETV2B0 = (build_EfficientNet, efficientnet.EfficientNetV2B0)
+    EFFICIENTNETV2B2 = (build_EfficientNet, efficientnet.EfficientNetV2B2)
+    EFFICIENTNETV2S = (build_EfficientNet, efficientnet.EfficientNetV2S)
+    TRANSFORMERNET = (build_TransformerNet, TransformerNet)
+    CHANNELWISETRANSFORMERNET = (build_TransformerNet, ChannelWiseTransformerNet)
+
+    builder: Callable[..., nn.Module]
+    net_cls: type[nn.Module]
+
+    def __init__(self, builder: Callable[..., nn.Module], net_cls: type[nn.Module]):
+        self.builder = builder
+        self.net_cls = net_cls
+
+    @classmethod
+    def get_from_name(cls, name: str) -> Self:
+        """Return the member named ``name``, ignoring case."""
+        try:
+            return cls[name.upper()]
+        except KeyError:
+            raise ValueError(
+                f"unknown name for model type: {name!r}; known: {list(cls.__members__)}"
+            ) from None
+
+    def build(
+        self,
+        input_channels: int,
+        input_size: int,
+        output_size: int,
+        net_params: dict[str, Any],
+        logger: logging.Logger,
+        **kwargs: Any,
+    ) -> nn.Module:
+        """Build the network by passing this member's class to its category builder."""
+        return self.builder(
+            self.net_cls,
+            input_channels,
+            input_size,
+            output_size,
+            net_params,
+            logger,
+            **kwargs,
         )
 
 
+# --------------------------------------
+# Neural Networks for Inverse Maps
+# --------------------------------------
+
+
 def create_network(
-    params: dict,
+    params: dict[str, Any],
     device: torch.device,
     logger: logging.Logger | None = None,
 ) -> nn.Module:
     """Build and return a neural network from a configuration dict.
 
-    Dispatches to the appropriate private factory based on
-    ``params["net"]["type"]``. Input and output sizes are taken from
-    ``params["data"]``, which is populated by ``load_data``.
-
-    Supported network types (``params["net"]["type"]``):
-
-    - ``"MLPNET"``         -- MLP (flat input)
-    - ``"MLPRESNET"``      -- residual MLP (flat input)
-    - ``"CONVNET"``        -- 1-D convolutional + MLP (time-series input)
-    - ``"CONVRESNET"``     -- residual 1-D convolutional + MLP (time-series input)
-    - ``"EFFICIENTNET"``   -- EfficientNet architecture (time-series input)
-    - ``"TRANSFORMERNET"`` -- Transformer architecture (time-series input)
+    Dispatches on ``params["net"]["type"]``, which must name a
+    ``NetworkType`` member (case-insensitive). Input and output sizes are
+    taken from ``params["data"]``, which is populated by ``load_data``.
 
     Args:
         params: Configuration dict with two required top-level keys:
@@ -324,8 +399,8 @@ def create_network(
     Raises:
         ValueError: If ``params["net"]["type"]`` is not a known
             ``NetworkType`` name.
-        NotImplementedError: If ``num_features`` has a length other than
-            1 or 2, or the requested network type has no implementation.
+        NotImplementedError: If ``num_features`` has a length other than 2,
+            or ``num_targets`` has a length other than 1.
     """
     if logger is None:
         logger = logging.getLogger("create_network")
@@ -356,32 +431,7 @@ def create_network(
     else:
         raise NotImplementedError(f"num_targets={num_targets}")
 
-    if NetworkType.MLPNET == net_type:
-        net = _create_MLPNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    elif NetworkType.MLPRESNET == net_type:
-        net = _create_MLPResNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    elif NetworkType.CONVNET == net_type:
-        net = _create_convNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    elif NetworkType.CONVRESNET == net_type:
-        net = _create_convResNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    elif NetworkType.EFFICIENTNET == net_type:
-        net = _create_efficientNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    elif NetworkType.TRANSFORMERNET == net_type:
-        net = _create_transformerNet(
-            input_channels, input_length, output_size, net_params, logger
-        )
-    else:
-        raise NotImplementedError(f"type {net_type} is not implemented")
+    net = net_type.build(input_channels, input_length, output_size, net_params, logger)
 
     # move network to device
     net.to(device)
@@ -403,7 +453,9 @@ def create_network(
 # --------------------------------------
 
 
-def create_enc_dec(params, logger):
+def create_enc_dec(
+    params: dict[str, Any], logger: logging.Logger
+) -> tuple[nn.Module, nn.Module]:
     e_net_params = params["e_net"]
     d_net_params = params["d_net"]
     e_net_type = NetworkType.get_from_name(e_net_params["type"])
@@ -473,10 +525,10 @@ def create_enc_dec(params, logger):
     return e_net, d_net
 
 
-def create_ae(params, logger):
+def create_ae(params: dict[str, Any], logger: logging.Logger) -> Autoencoder:
     e_net, d_net = create_enc_dec(params, logger)
 
-    def _output_transf(y):
+    def _output_transf(y: torch.Tensor) -> torch.Tensor:
         return y.reshape(-1, *params["data"]["num_features"])
 
     return Autoencoder(e_net, d_net, output_layer_transformation=_output_transf)
@@ -487,7 +539,7 @@ def create_ae(params, logger):
 # --------------------------------------
 
 
-def create_unet(params, logger):
+def create_unet(params: dict[str, Any], logger: logging.Logger) -> UNet:
     logger.info(f"create UNet(1, 1, ...)")
     return UNet(
         1,
